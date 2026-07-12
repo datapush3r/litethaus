@@ -22,8 +22,19 @@ auth_enabled: true
 # Directory containing one subfolder per stack, each with its own docker-compose.yaml
 stacks_dir: /opt/litethaus/stacks
 
+# Whether litethaus manages the bundled Caddy reverse proxy. Set to false if
+# you're fronting your own stacks with a different reverse proxy - litethaus
+# will skip pushing config to Caddy entirely (domain/port fields in stacks
+# are simply ignored).
+caddy_enabled: true
+
 # Base URL for the Caddy admin API used to push proxy config
 caddy_admin_url: http://localhost:2019
+
+# External port stack links should use, e.g. 8443 if host port 443 is already
+# taken by something else. Cosmetic only - doesn't change what Caddy binds to,
+# just what the dashboard puts in the "open" links it generates.
+https_port: 443
 
 # HTTPS mode for the reverse proxy: "off" (HTTP only), "internal" (self-signed
 # certs via Caddy's local CA - fine for .home.arpa/.local domains), or "acme"

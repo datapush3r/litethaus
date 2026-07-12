@@ -23,6 +23,7 @@ services:
       - backend
 
   caddy:
+    profiles: ["caddy"]
     build:
       context: ./caddy
     volumes:

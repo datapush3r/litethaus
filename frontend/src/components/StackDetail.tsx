@@ -5,6 +5,7 @@ import {
   deleteStack,
   fetchStackRaw,
   logsSocketUrl,
+  stackUrl,
   updateStackRaw,
   type ContainerInfo,
   type Stack,
@@ -21,6 +22,7 @@ import { YamlEditor } from './YamlEditor'
 
 interface StackDetailProps {
   stack: Stack
+  httpsPort: number
   status: StackState | null
   containers: ContainerInfo[]
   busy: boolean
@@ -34,7 +36,16 @@ const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon'])
 const H_HANDLE = 'mx-1 w-1 shrink-0 cursor-col-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
 const V_HANDLE = 'my-1 h-1 shrink-0 cursor-row-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
 
-export function StackDetail({ stack, status, containers, busy, onToggle, onSaved, onDeleted }: StackDetailProps) {
+export function StackDetail({
+  stack,
+  httpsPort,
+  status,
+  containers,
+  busy,
+  onToggle,
+  onSaved,
+  onDeleted,
+}: StackDetailProps) {
   const [lines, setLines] = useState<string[]>([])
   const [rawContent, setRawContent] = useState<string | null>(null)
   const [draftContent, setDraftContent] = useState<string | null>(null)
@@ -177,7 +188,7 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
             <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
               {domain ? (
                 <a
-                  href={`http://${domain}`}
+                  href={stackUrl(domain, httpsPort)}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1 hover:text-neutral-900 dark:hover:text-neutral-100"

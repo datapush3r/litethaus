@@ -2,7 +2,7 @@
 
 A stateless, database-free, all-in-one homelab dashboard, docker-compose manager, and automated reverse proxy.
 
-litethaus scans a directory of docker-compose stacks, gives you a dashboard to start/stop them and watch their logs in real time, and automatically wires up [Caddy](https://caddyserver.com/) as a reverse proxy for whichever ones you expose — no labels in your compose files, no database, no separate proxy config to maintain by hand.
+litethaus scans a directory of docker-compose stacks, gives you a dashboard to start/stop them and watch their logs in real time, and can optionally wire up [Caddy](https://caddyserver.com/) as a reverse proxy for whichever ones you expose — no labels in your compose files, no database, no separate proxy config to maintain by hand. If you already run your own reverse proxy, Caddy management can be turned off entirely.
 
 ![litethaus stack detail page, showing the compose editor, terminal, and logs](dashboard-stack.png)
 
@@ -23,7 +23,7 @@ litethaus scans a directory of docker-compose stacks, gives you a dashboard to s
 - The host file system is the source of truth — there's no database. Litethaus just reads and writes the compose files already in your stacks directory.
 - Per-stack metadata (domain, port, icon) lives in each stack's own compose file, in a root-level `x-litethaus:` extension field — invisible to `docker compose` itself, but read by litethaus.
 - Global settings (which directory to scan, HTTPS mode, theme, etc.) live in a single `config.yaml`, edited either directly or through the Settings page.
-- The reverse proxy is a bundled Caddy instance, configured entirely through Caddy's native admin API — litethaus never touches your services' compose files to add proxy labels.
+- The reverse proxy is a bundled Caddy instance, configured entirely through Caddy's native admin API — litethaus never touches your services' compose files to add proxy labels. It's optional: turn `caddy_enabled` off in Settings if you front stacks with your own reverse proxy instead.
 
 ## Getting started
 
@@ -33,6 +33,12 @@ Requires Docker and Docker Compose.
 git clone <this repo>
 cd litethaus
 docker compose -f docker-compose.dev.yaml up --build
+```
+
+This starts the dashboard without the bundled Caddy proxy — handy if you already run your own reverse proxy in front of your stacks. To also run Caddy, add `--profile caddy`:
+
+```bash
+docker compose -f docker-compose.dev.yaml --profile caddy up --build
 ```
 
 Then open `http://localhost:5173`. On first run you'll be asked to set up an admin username and password. Once you're in, go to **Settings** and point `Stacks directory` at wherever your own compose stacks live (a bind mount, in the containerized setup above).
@@ -45,6 +51,7 @@ Global settings live in `config.yaml`, generated automatically with defaults on 
 |---|---|
 | `auth_enabled` | Whether the single-user login gate is enforced; set to `false` to disable auth entirely (local testing only — leaves every endpoint open) |
 | `stacks_dir` | Directory containing one subfolder per stack |
+| `caddy_enabled` | Whether litethaus manages the bundled Caddy reverse proxy; set to `false` if you front stacks with your own reverse proxy instead |
 | `caddy_admin_url` | Base URL for Caddy's admin API |
 | `https_mode` | `off`, `internal` (self-signed), or `acme` (Let's Encrypt) |
 | `acme_email` | Registration email, required when `https_mode` is `acme` |

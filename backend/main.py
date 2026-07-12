@@ -113,7 +113,7 @@ def get_config() -> dict[str, Any]:
     return data
 
 
-CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_url", "cloudflare_api_token", "wildcard_domain"}
+CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_url", "cloudflare_api_token", "wildcard_domain", "caddy_enabled"}
 
 
 @app.patch("/config")

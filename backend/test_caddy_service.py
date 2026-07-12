@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from caddy_service import CaddyService
 from stacks_service import Stack
 
@@ -89,6 +91,13 @@ def test_build_config_acme_https_with_wildcard_domain_uses_single_wildcard_subje
     assert policy["subjects"] == ["*.example.com"]
 
 
+def test_sync_skips_request_when_caddy_disabled() -> None:
+    with patch("caddy_service.config_service.load", return_value={"caddy_enabled": False}), \
+         patch("caddy_service.urllib.request.urlopen") as urlopen:
+        CaddyService(admin_url="http://caddy:2019").sync([])
+        urlopen.assert_not_called()
+
+
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
     test_build_config_prefers_explicit_service_over_first_service()
@@ -98,4 +107,5 @@ if __name__ == "__main__":
     test_build_config_acme_https_uses_configured_email()
     test_build_config_acme_https_with_cloudflare_token_adds_dns_challenge()
     test_build_config_acme_https_with_wildcard_domain_uses_single_wildcard_subject()
+    test_sync_skips_request_when_caddy_disabled()
     print("ok")

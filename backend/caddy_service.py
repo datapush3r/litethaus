@@ -102,6 +102,8 @@ class CaddyService:
 
     def sync(self, stacks: list[Stack]) -> None:
         cfg = config_service.load()
+        if not cfg.get("caddy_enabled", True):
+            return
         config = self.build_config(
             stacks,
             https_mode=cfg.get("https_mode", "off"),

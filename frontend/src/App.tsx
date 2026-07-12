@@ -105,10 +105,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [route, navigate] = useRoute()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [httpsPort, setHttpsPort] = useState(443)
 
   useEffect(() => {
     fetchConfig()
-      .then((cfg) => setThemePreference(String(cfg.theme ?? 'system')))
+      .then((cfg) => {
+        setThemePreference(String(cfg.theme ?? 'system'))
+        setHttpsPort(Number(cfg.https_port ?? 443))
+      })
       .catch(() => {
         /* fall back to whatever theme.ts's default already applied */
       })
@@ -263,6 +267,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           {route.view === 'stack' && stacks !== null && selectedStack && (
             <StackDetail
               stack={selectedStack}
+              httpsPort={httpsPort}
               status={statuses[selectedStack.name] ?? null}
               containers={health[selectedStack.name]?.containers ?? []}
               busy={!!busy[selectedStack.name]}
@@ -281,6 +286,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <StackCard
                   key={stack.name}
                   stack={stack}
+                  httpsPort={httpsPort}
                   status={statuses[stack.name] ?? null}
                   health={health[stack.name]?.health ?? null}
                   busy={!!busy[stack.name]}

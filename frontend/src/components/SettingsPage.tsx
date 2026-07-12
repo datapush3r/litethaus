@@ -12,7 +12,9 @@ const HTTPS_MODE_OPTIONS = [
 
 interface FormState {
   stacks_dir: string
+  caddy_enabled: boolean
   caddy_admin_url: string
+  https_port: number
   https_mode: string
   acme_email: string
   cloudflare_api_token: string
@@ -25,7 +27,9 @@ export function SettingsPage() {
   const [config, setConfig] = useState<Config | null>(null)
   const [form, setForm] = useState<FormState>({
     stacks_dir: '',
+    caddy_enabled: true,
     caddy_admin_url: '',
+    https_port: 443,
     https_mode: 'off',
     acme_email: '',
     cloudflare_api_token: '',
@@ -50,7 +54,9 @@ export function SettingsPage() {
         setConfig(cfg)
         setForm({
           stacks_dir: String(cfg.stacks_dir ?? ''),
+          caddy_enabled: Boolean(cfg.caddy_enabled ?? true),
           caddy_admin_url: String(cfg.caddy_admin_url ?? ''),
+          https_port: Number(cfg.https_port ?? 443),
           https_mode: String(cfg.https_mode ?? 'off'),
           acme_email: String(cfg.acme_email ?? ''),
           cloudflare_api_token: String(cfg.cloudflare_api_token ?? ''),
@@ -116,33 +122,73 @@ export function SettingsPage() {
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-          Caddy admin URL
-        </label>
+      <div className="flex items-start gap-2">
         <input
-          value={form.caddy_admin_url}
-          onChange={(e) => setForm((f) => ({ ...f, caddy_admin_url: e.target.value }))}
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          id="caddy_enabled"
+          type="checkbox"
+          checked={form.caddy_enabled}
+          onChange={(e) => setForm((f) => ({ ...f, caddy_enabled: e.target.checked }))}
+          className="mt-0.5"
         />
+        <label htmlFor="caddy_enabled" className="text-sm text-neutral-700 dark:text-neutral-300">
+          Use the bundled Caddy reverse proxy
+          <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+            Turn off if you front your own stacks with a different reverse proxy - litethaus
+            will stop pushing config to Caddy, and each stack's domain/port fields are ignored.
+          </p>
+        </label>
       </div>
 
-      <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">HTTPS</label>
-        <select
-          value={form.https_mode}
-          onChange={(e) => setForm((f) => ({ ...f, https_mode: e.target.value }))}
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        >
-          {HTTPS_MODE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {form.caddy_enabled && (
+        <>
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              Caddy admin URL
+            </label>
+            <input
+              value={form.caddy_admin_url}
+              onChange={(e) => setForm((f) => ({ ...f, caddy_admin_url: e.target.value }))}
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+          </div>
 
-      {form.https_mode === 'acme' && (
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              HTTPS port
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              value={form.https_port}
+              onChange={(e) => setForm((f) => ({ ...f, https_port: Number(e.target.value) || 443 }))}
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              External port stack links should use, e.g. 8443 if host port 443 is already taken by
+              something else. Doesn't change what Caddy binds to - just what the dashboard's "open"
+              links point at.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">HTTPS</label>
+            <select
+              value={form.https_mode}
+              onChange={(e) => setForm((f) => ({ ...f, https_mode: e.target.value }))}
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            >
+              {HTTPS_MODE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
+
+      {form.caddy_enabled && form.https_mode === 'acme' && (
         <>
           <div>
             <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">

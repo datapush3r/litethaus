@@ -95,7 +95,9 @@ export function terminalSocketUrl(name: string, container: string): string {
 
 export interface Config {
   stacks_dir: string
+  caddy_enabled: boolean
   caddy_admin_url: string
+  https_port: number
   https_mode: string
   acme_email: string
   cloudflare_api_token: string
@@ -103,6 +105,10 @@ export interface Config {
   theme: string
   webhook_url: string
   [key: string]: unknown
+}
+
+export function stackUrl(domain: string, httpsPort: number): string {
+  return httpsPort === 443 ? `https://${domain}` : `https://${domain}:${httpsPort}`
 }
 
 export async function fetchConfig(): Promise<Config> {

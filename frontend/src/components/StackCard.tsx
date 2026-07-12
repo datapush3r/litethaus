@@ -1,10 +1,11 @@
 import { AlertTriangle, ExternalLink } from 'lucide-react'
-import type { HealthState, Stack, StackState } from '../api'
+import { stackUrl, type HealthState, type Stack, type StackState } from '../api'
 import { BAD_HEALTH, STATUS_BADGE } from '../statusStyles'
 import { StackIcon } from './StackIcon'
 
 interface StackCardProps {
   stack: Stack
+  httpsPort: number
   status: StackState | null
   health: HealthState | null
   busy: boolean
@@ -12,7 +13,7 @@ interface StackCardProps {
   onOpen: () => void
 }
 
-export function StackCard({ stack, status, health, busy, onToggle, onOpen }: StackCardProps) {
+export function StackCard({ stack, httpsPort, status, health, busy, onToggle, onOpen }: StackCardProps) {
   const domain = typeof stack.x_litethaus.domain === 'string' ? stack.x_litethaus.domain : null
 
   return (
@@ -44,7 +45,7 @@ export function StackCard({ stack, status, health, busy, onToggle, onOpen }: Sta
         </div>
       ) : domain ? (
         <a
-          href={`http://${domain}`}
+          href={stackUrl(domain, httpsPort)}
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
