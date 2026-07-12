@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { fetchStacks, fetchStatus, stackDown, stackUp, type Stack, type StackState } from './api'
 import { StackCard } from './components/StackCard'
 import { StackDetail } from './components/StackDetail'
+import { SettingsPage } from './components/SettingsPage'
 import { Sidebar } from './components/Sidebar'
-import { parseSelected, stackPath } from './routing'
+import { parseRoute, routePath, type Route } from './routing'
 
 const STATUS_POLL_MS = 5000
 
-function useSelectedStack(): [string | null, (name: string | null) => void] {
+function useRoute(): [Route, (route: Route) => void] {
   const [path, setPath] = useState(() => window.location.pathname)
 
   useEffect(() => {
@@ -16,13 +17,13 @@ function useSelectedStack(): [string | null, (name: string | null) => void] {
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  const navigate = useCallback((name: string | null) => {
-    const next = stackPath(name)
+  const navigate = useCallback((route: Route) => {
+    const next = routePath(route)
     window.history.pushState({}, '', next)
     setPath(next)
   }, [])
 
-  return [parseSelected(path), navigate]
+  return [parseRoute(path), navigate]
 }
 
 function App() {
@@ -30,7 +31,7 @@ function App() {
   const [statuses, setStatuses] = useState<Record<string, StackState>>({})
   const [busy, setBusy] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
-  const [selected, navigate] = useSelectedStack()
+  const [route, navigate] = useRoute()
 
   const refreshStatuses = useCallback(async (list: Stack[]) => {
     const entries = await Promise.all(
@@ -63,10 +64,10 @@ function App() {
   }, [refreshStatuses])
 
   useEffect(() => {
-    if (stacks && selected && !stacks.some((s) => s.name === selected)) {
-      navigate(null)
+    if (stacks && route.view === 'stack' && !stacks.some((s) => s.name === route.name)) {
+      navigate({ view: 'stacks' })
     }
-  }, [stacks, selected, navigate])
+  }, [stacks, route, navigate])
 
   async function handleToggle(stack: Stack) {
     setBusy((prev) => ({ ...prev, [stack.name]: true }))
@@ -80,27 +81,40 @@ function App() {
     }
   }
 
-  const selectedStack = stacks?.find((s) => s.name === selected) ?? null
+  const selectedStack = route.view === 'stack' ? (stacks?.find((s) => s.name === route.name) ?? null) : null
+
+  const heading =
+    route.view === 'settings' ? 'Settings' : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
 
   return (
     <div className="flex min-h-screen bg-neutral-950 text-neutral-100">
-      <Sidebar stacks={stacks ?? []} statuses={statuses} selected={selected} onSelect={navigate} />
+      <Sidebar
+        stacks={stacks ?? []}
+        statuses={statuses}
+        route={route}
+        onSelectStack={(name) => navigate(name ? { view: 'stack', name } : { view: 'stacks' })}
+        onOpenSettings={() => navigate({ view: 'settings' })}
+      />
 
       <div className="flex-1">
         <header className="border-b border-neutral-800 px-6 py-4">
-          <h1 className="text-sm text-neutral-400">Stacks{selected ? ` / ${selected}` : ''}</h1>
+          <h1 className="text-sm text-neutral-400">{heading}</h1>
         </header>
 
         <main className="p-6">
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {route.view === 'settings' && <SettingsPage />}
 
-          {!error && stacks === null && <p className="text-sm text-neutral-500">Loading stacks…</p>}
+          {route.view !== 'settings' && error && <p className="text-sm text-red-400">{error}</p>}
 
-          {stacks !== null && stacks.length === 0 && (
+          {route.view !== 'settings' && !error && stacks === null && (
+            <p className="text-sm text-neutral-500">Loading stacks…</p>
+          )}
+
+          {route.view !== 'settings' && stacks !== null && stacks.length === 0 && (
             <p className="text-sm text-neutral-500">No stacks found. Add one under stacks_dir.</p>
           )}
 
-          {stacks !== null && selectedStack && (
+          {route.view === 'stack' && stacks !== null && selectedStack && (
             <StackDetail
               stack={selectedStack}
               status={statuses[selectedStack.name] ?? null}
@@ -109,7 +123,7 @@ function App() {
             />
           )}
 
-          {stacks !== null && stacks.length > 0 && !selected && (
+          {route.view === 'stacks' && stacks !== null && stacks.length > 0 && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {stacks.map((stack) => (
                 <StackCard
@@ -118,7 +132,7 @@ function App() {
                   status={statuses[stack.name] ?? null}
                   busy={!!busy[stack.name]}
                   onToggle={() => handleToggle(stack)}
-                  onOpen={() => navigate(stack.name)}
+                  onOpen={() => navigate({ view: 'stack', name: stack.name })}
                 />
               ))}
             </div>

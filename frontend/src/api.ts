@@ -33,3 +33,24 @@ export function logsSocketUrl(name: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/api/stacks/${name}/logs`
 }
+
+export interface Config {
+  stacks_dir: string
+  caddy_admin_url: string
+  theme: string
+  [key: string]: unknown
+}
+
+export async function fetchConfig(): Promise<Config> {
+  const res = await fetch('/api/config')
+  return res.json()
+}
+
+export async function updateConfig(patch: Record<string, unknown>): Promise<Config> {
+  const res = await fetch('/api/config', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  return res.json()
+}
