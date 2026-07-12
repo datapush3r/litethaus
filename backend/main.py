@@ -88,9 +88,15 @@ async def stack_logs(websocket: WebSocket, name: str) -> None:
     await websocket.accept()
 
     async def forward_logs() -> None:
-        async with aclosing(docker_service.stream_logs(stack)) as lines:
-            async for line in lines:
-                await websocket.send_text(line)
+        # `docker compose logs -f` exits as soon as there's nothing to tail
+        # (stack not up yet, or just stopped) rather than waiting for a
+        # container to appear. Re-attach instead of treating that as done,
+        # so a client watching a stopped stack picks up logs once it starts.
+        while True:
+            async with aclosing(docker_service.stream_logs(stack)) as lines:
+                async for line in lines:
+                    await websocket.send_text(line)
+            await asyncio.sleep(1)
 
     async def watch_disconnect() -> None:
         # A client that only receives (never sends) leaves us blocked on the
