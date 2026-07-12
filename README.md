@@ -1,4 +1,4 @@
-# litethaus
+# LITEHAUS
 
 A stateless, database-free, all-in-one homelab dashboard, docker-compose manager, and automated reverse proxy.
 
