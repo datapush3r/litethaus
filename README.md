@@ -62,5 +62,3 @@ x-litethaus:
 - **Backend:** `cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && uvicorn main:app --reload`
 - **Frontend:** `cd frontend && npm install && npm run dev`
 - **Full stack:** `docker compose -f docker-compose.dev.yaml up --build`
-
-See `CLAUDE.md` for architecture rules and conventions if you're contributing.

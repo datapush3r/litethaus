@@ -8,3 +8,7 @@ docker-compose.override.local.yaml
 # first run (see backend/config_service.py DEFAULT_CONFIG), so it
 # never needs to be tracked or shipped as seed data.
 data/config.yaml
+
+# Agent-facing project instructions - kept local/private, not shipped
+# in the public repo.
+CLAUDE.md
