@@ -5,6 +5,7 @@ export interface Stack {
   services: string[]
   error: string | null
   compose_files: string[]
+  override_file: string | null
 }
 
 export type StackState = 'running' | 'partial' | 'stopped'

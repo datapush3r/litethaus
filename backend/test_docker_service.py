@@ -31,6 +31,28 @@ def test_compose_cmd_uses_project_name_and_compose_file() -> None:
     ]
 
 
+def test_compose_cmd_adds_override_file_when_present() -> None:
+    stack = Stack(
+        name="example",
+        path="/opt/litethaus/stacks/example/compose.yaml",
+        override_file="compose.override.yaml",
+    )
+    svc = DockerService()
+
+    assert svc._compose_cmd(stack, "up", "-d") == [
+        "docker",
+        "compose",
+        "-p",
+        "example",
+        "-f",
+        stack.path,
+        "-f",
+        "/opt/litethaus/stacks/example/compose.override.yaml",
+        "up",
+        "-d",
+    ]
+
+
 def test_status_from_details() -> None:
     assert DockerService.status_from_details([]) == "stopped"
     running = {"name": "a", "state": "running", "health": None, "restart_count": 0}
@@ -74,6 +96,7 @@ def test_summarize_health_unhealthy_and_healthy_and_unknown() -> None:
 
 if __name__ == "__main__":
     test_compose_cmd_uses_project_name_and_compose_file()
+    test_compose_cmd_adds_override_file_when_present()
     test_status_from_details()
     test_summarize_health_prefers_restarting_over_unhealthy()
     test_summarize_health_unhealthy_and_healthy_and_unknown()

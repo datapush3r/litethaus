@@ -3,6 +3,7 @@ import os
 import pty
 import subprocess
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import docker
@@ -31,7 +32,10 @@ class DockerService:
             self.client.networks.create(NETWORK_NAME, driver="bridge")
 
     def _compose_cmd(self, stack: Stack, *args: str) -> list[str]:
-        return ["docker", "compose", "-p", stack.name, "-f", stack.path, *args]
+        cmd = ["docker", "compose", "-p", stack.name, "-f", stack.path]
+        if stack.override_file:
+            cmd += ["-f", str(Path(stack.path).parent / stack.override_file)]
+        return cmd + list(args)
 
     def compose_up(self, stack: Stack) -> tuple[bool, str]:
         self.ensure_network()

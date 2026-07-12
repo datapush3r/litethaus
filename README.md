@@ -8,10 +8,10 @@ litethaus scans a directory of docker-compose stacks, gives you a dashboard to s
 
 ## Features
 
-- **Stack discovery** — scans a directory for one subfolder per stack, each with its own `compose.yaml` (or `compose.yml` / `docker-compose.yaml` / `docker-compose.yml`)
+- **Stack discovery** — scans a directory for one subfolder per stack, each with its own `compose.yaml` (or `compose.yml` / `docker-compose.yaml` / `docker-compose.yml`), plus an optional override file (see below)
 - **Start/stop/logs** — control stacks and stream their logs live from the browser
-- **Stack authoring** — create, edit, and delete stacks from the UI via a raw compose YAML editor, edited inline on the stack page
-- **In-browser terminal** — a real shell into a stack's running container, next to its compose editor and live logs
+- **Stack authoring** — create, edit, and delete stacks from the UI via a raw compose YAML editor, edited inline on the stack page; a stack with multiple containers or multiple compose files gets tabs for each
+- **In-browser terminal** — a real shell into any of a stack's running containers, next to its compose editor and live logs
 - **Automatic reverse proxy** — add an `x-litethaus:` block to a stack's compose file with a domain and port, and litethaus wires it into Caddy automatically
 - **Automatic HTTPS** — self-signed certs via Caddy's local CA (for `.home.arpa`/`.local` domains) or real ACME/Let's Encrypt certs for publicly resolvable domains
 - **Health monitoring** — per-container health and restart-loop status in the dashboard, with an optional webhook alert
@@ -59,6 +59,8 @@ x-litethaus:
   service: web    # optional: which service to proxy to, if there's more than one
   icon: nginx     # optional: slug from https://github.com/homarr-labs/dashboard-icons
 ```
+
+A stack directory can also hold an override file — `compose.override.yaml`/`.yml` next to `compose.yaml`/`.yml`, or `docker-compose.override.yaml`/`.yml` next to `docker-compose.yaml`/`.yml` — which litethaus auto-merges in via a second `-f` whenever the stack starts, same as `docker compose` does by default. Any other compose-named file in the directory (e.g. a leftover from switching naming conventions) is just exposed as an extra editor tab and otherwise ignored.
 
 ## Development
 

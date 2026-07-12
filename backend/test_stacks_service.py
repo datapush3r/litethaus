@@ -67,6 +67,43 @@ def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -
         assert stacks["uses-compose-yaml"].compose_files == ["compose.yaml"]
 
 
+def test_override_file_is_detected_and_ordered_right_after_the_primary_file() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        stacks_dir = Path(tmp)
+
+        with_override = stacks_dir / "with-override"
+        with_override.mkdir()
+        (with_override / "compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
+        (with_override / "compose.override.yaml").write_text("services:\n  web:\n    ports: ['8080:80']\n")
+        # a leftover legacy file - inert, but should still show up (last)
+        (with_override / "docker-compose.yaml").write_text("services:\n  old:\n    image: nginx:alpine\n")
+
+        # docker-compose.* base pairs with docker-compose.override.*, not compose.override.*
+        wrong_family = stacks_dir / "wrong-family"
+        wrong_family.mkdir()
+        (wrong_family / "docker-compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
+        (wrong_family / "compose.override.yaml").write_text("services:\n  web:\n    ports: ['8080:80']\n")
+
+        no_override = stacks_dir / "no-override"
+        no_override.mkdir()
+        (no_override / "compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
+
+        svc = StackService(stacks_dir=stacks_dir)
+        stacks = {s.name: s for s in svc.scan()}
+
+        assert stacks["with-override"].override_file == "compose.override.yaml"
+        assert stacks["with-override"].compose_files == ["compose.yaml", "compose.override.yaml", "docker-compose.yaml"]
+
+        # the mismatched-family override file isn't recognized at all - not
+        # merged, not even shown as an editor tab (matching docker compose's
+        # own behavior, which wouldn't auto-include it either)
+        assert stacks["wrong-family"].override_file is None
+        assert stacks["wrong-family"].compose_files == ["docker-compose.yaml"]
+
+        assert stacks["no-override"].override_file is None
+        assert stacks["no-override"].compose_files == ["compose.yaml"]
+
+
 def test_multiple_compose_files_are_each_independently_readable_and_writable() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         stacks_dir = Path(tmp)
@@ -147,6 +184,7 @@ def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
 if __name__ == "__main__":
     test_scan_parses_metadata_and_isolates_errors()
     test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order()
+    test_override_file_is_detected_and_ordered_right_after_the_primary_file()
     test_multiple_compose_files_are_each_independently_readable_and_writable()
     test_create_write_and_delete_stack_round_trip()
     test_restart_watcher_signals_the_current_stop_event_when_armed()

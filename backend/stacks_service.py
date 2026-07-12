@@ -21,6 +21,14 @@ DEFAULT_COMPOSE_FILENAME = COMPOSE_FILENAMES[0]
 STACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+def _override_candidates(primary_filename: str) -> tuple[str, ...]:
+    # Matches docker compose's own default auto-merge convention: a
+    # "compose.yaml" base pairs with "compose.override.yaml"/".yml", a
+    # "docker-compose.yaml" base pairs with "docker-compose.override.*".
+    family = "docker-compose" if primary_filename.startswith("docker-compose") else "compose"
+    return (f"{family}.override.yaml", f"{family}.override.yml")
+
+
 @dataclass
 class Stack:
     name: str
@@ -29,9 +37,14 @@ class Stack:
     services: list[str] = field(default_factory=list)
     error: str | None = None
     # Every compose-named file found in the stack's directory, in docker
-    # compose's own precedence order - path/x_litethaus/services are always
-    # parsed from compose_files[0], the rest are only exposed for editing.
+    # compose's own precedence order (plus the override file, if any,
+    # inserted right after the primary) - path/x_litethaus/services are
+    # always parsed from compose_files[0] alone, the rest are only exposed
+    # for editing except override_file (see below).
     compose_files: list[str] = field(default_factory=list)
+    # Filename of the override sibling that docker compose auto-merges on
+    # top of compose_files[0] at runtime (up/down), if one exists.
+    override_file: str | None = None
 
 
 class StackService:
@@ -58,7 +71,8 @@ class StackService:
             compose_paths = self._find_compose_files(entry)
             if not compose_paths:
                 continue
-            stacks[entry.name] = self._parse(entry.name, compose_paths)
+            override_path = self._find_override_file(entry, compose_paths[0].name)
+            stacks[entry.name] = self._parse(entry.name, compose_paths, override_path)
 
         with self._lock:
             self._stacks = stacks
@@ -67,9 +81,21 @@ class StackService:
     def _find_compose_files(self, entry: Path) -> list[Path]:
         return [entry / filename for filename in COMPOSE_FILENAMES if (entry / filename).exists()]
 
-    def _parse(self, name: str, compose_paths: list[Path]) -> Stack:
+    def _find_override_file(self, entry: Path, primary_filename: str) -> Path | None:
+        for filename in _override_candidates(primary_filename):
+            candidate = entry / filename
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _parse(self, name: str, compose_paths: list[Path], override_path: Path | None) -> Stack:
         compose_path = compose_paths[0]
-        compose_files = [p.name for p in compose_paths]
+        # override file listed right after the primary, ahead of any other
+        # (inert, legacy) base-precedence files also sitting in the folder
+        compose_files = [compose_path.name] + ([override_path.name] if override_path else []) + [
+            p.name for p in compose_paths[1:]
+        ]
+        override_file = override_path.name if override_path else None
         try:
             with compose_path.open("r") as f:
                 data = _yaml.load(f) or {}
@@ -79,10 +105,13 @@ class StackService:
                 x_litethaus=dict(data.get("x-litethaus") or {}),
                 services=list((data.get("services") or {}).keys()),
                 compose_files=compose_files,
+                override_file=override_file,
             )
         except Exception as exc:
             logger.exception("Failed to parse %s", compose_path)
-            return Stack(name=name, path=str(compose_path), error=str(exc), compose_files=compose_files)
+            return Stack(
+                name=name, path=str(compose_path), error=str(exc), compose_files=compose_files, override_file=override_file
+            )
 
     def list_stacks(self) -> list[Stack]:
         # scan() takes self._lock itself, so it must never be called while

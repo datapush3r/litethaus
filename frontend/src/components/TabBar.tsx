@@ -2,9 +2,10 @@ interface TabBarProps {
   items: string[]
   active: string | null
   onSelect: (item: string) => void
+  titles?: Record<string, string>
 }
 
-export function TabBar({ items, active, onSelect }: TabBarProps) {
+export function TabBar({ items, active, onSelect, titles }: TabBarProps) {
   if (items.length <= 1) return null
 
   return (
@@ -13,6 +14,7 @@ export function TabBar({ items, active, onSelect }: TabBarProps) {
         <button
           key={item}
           onClick={() => onSelect(item)}
+          title={titles?.[item]}
           className={`shrink-0 rounded px-2 py-0.5 font-mono text-xs ${
             active === item
               ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'

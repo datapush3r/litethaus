@@ -255,7 +255,16 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
               {confirmingSave ? (
                 <h3 className="shrink-0 text-xs uppercase text-neutral-400 dark:text-neutral-500">Review changes</h3>
               ) : stack.compose_files.length > 1 ? (
-                <TabBar items={stack.compose_files} active={effectiveFile} onSelect={setActiveFile} />
+                <TabBar
+                  items={stack.compose_files}
+                  active={effectiveFile}
+                  onSelect={setActiveFile}
+                  titles={
+                    stack.override_file
+                      ? { [stack.override_file]: 'Automatically merged over the primary file at runtime' }
+                      : undefined
+                  }
+                />
               ) : (
                 <h3 className="shrink-0 text-xs uppercase text-neutral-400 dark:text-neutral-500">
                   {stack.compose_files[0] ?? 'compose.yaml'}
