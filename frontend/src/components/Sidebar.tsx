@@ -38,7 +38,7 @@ export function Sidebar({
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      <div className="mb-4 px-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">litethaus</div>
+      <div className="mb-4 px-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">LITETHAUS</div>
 
       <div className="flex items-center gap-1 rounded px-1 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-900">
         <button

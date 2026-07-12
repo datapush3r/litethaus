@@ -192,7 +192,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
 
   return (
-    <div className="flex min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+    <div className="flex h-screen overflow-hidden bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/50 sm:hidden"
@@ -214,8 +214,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         onLogout={() => authLogout().then(onLogout)}
       />
 
-      <div className="min-w-0 flex-1">
-        <header className="flex items-center gap-3 border-b border-neutral-200 px-4 py-4 sm:px-6 dark:border-neutral-800">
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        <header className="flex shrink-0 items-center gap-3 border-b border-neutral-200 px-4 py-4 sm:px-6 dark:border-neutral-800">
           <button
             onClick={() => setSidebarOpen((o) => !o)}
             className="text-neutral-500 hover:text-neutral-800 sm:hidden dark:text-neutral-400 dark:hover:text-neutral-200"
@@ -226,7 +226,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           <h1 className="text-sm text-neutral-500 dark:text-neutral-400">{heading}</h1>
         </header>
 
-        <main className="p-4 sm:p-6">
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
           {route.view === 'settings' && <SettingsPage />}
 
           {route.view === 'new' && (

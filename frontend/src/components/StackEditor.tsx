@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { formatYaml } from '../yamlFormat'
+import { YamlEditor } from './YamlEditor'
 
 interface StackEditorProps {
   title: string
@@ -15,6 +17,17 @@ export function StackEditor({ title, initialName = '', nameEditable, initialCont
   const [content, setContent] = useState(initialContent)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [formatError, setFormatError] = useState<string | null>(null)
+
+  function handleFormat() {
+    const formatted = formatYaml(content)
+    if (formatted === null) {
+      setFormatError('fix YAML errors before formatting')
+      return
+    }
+    setFormatError(null)
+    setContent(formatted)
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -45,14 +58,21 @@ export function StackEditor({ title, initialName = '', nameEditable, initialCont
       )}
 
       <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">compose.yaml</label>
-        <textarea
+        <div className="mb-1 flex items-center justify-between">
+          <label className="block text-xs uppercase text-neutral-400 dark:text-neutral-500">compose.yaml</label>
+          <button
+            onClick={handleFormat}
+            className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          >
+            Format
+          </button>
+        </div>
+        <YamlEditor
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          spellCheck={false}
-          rows={24}
-          className="w-full rounded border border-neutral-300 bg-white p-3 font-mono text-xs text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          onChange={setContent}
+          className="h-[32rem] overflow-auto rounded border border-neutral-300 text-xs dark:border-neutral-700"
         />
+        {formatError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{formatError}</p>}
       </div>
 
       {error && (

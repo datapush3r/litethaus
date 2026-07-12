@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Box, ExternalLink } from 'lucide-react'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
   deleteStack,
   fetchStackRaw,
@@ -10,8 +11,11 @@ import {
   type StackState,
 } from '../api'
 import { HEALTH_BADGE, STATUS_BADGE } from '../statusStyles'
+import { formatYaml } from '../yamlFormat'
 import { LogPanel } from './LogPanel'
 import { Terminal } from './Terminal'
+import { YamlDiffView } from './YamlDiffView'
+import { YamlEditor } from './YamlEditor'
 
 interface StackDetailProps {
   stack: Stack
@@ -25,12 +29,17 @@ interface StackDetailProps {
 
 const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon'])
 
+const H_HANDLE = 'mx-1 w-1 shrink-0 cursor-col-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
+const V_HANDLE = 'my-1 h-1 shrink-0 cursor-row-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
+
 export function StackDetail({ stack, status, containers, busy, onToggle, onSaved, onDeleted }: StackDetailProps) {
   const [lines, setLines] = useState<string[]>([])
   const [rawContent, setRawContent] = useState<string | null>(null)
   const [draftContent, setDraftContent] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [formatError, setFormatError] = useState<string | null>(null)
+  const [confirmingSave, setConfirmingSave] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -44,6 +53,8 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
   useEffect(() => {
     setDeleteError(null)
     setSaveError(null)
+    setFormatError(null)
+    setConfirmingSave(false)
     setRawContent(null)
     setDraftContent(null)
     fetchStackRaw(stack.name).then((content) => {
@@ -52,13 +63,25 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
     })
   }, [stack.name])
 
-  async function handleSaveRaw() {
+  function handleFormat() {
+    if (draftContent === null) return
+    const formatted = formatYaml(draftContent)
+    if (formatted === null) {
+      setFormatError('fix YAML errors before formatting')
+      return
+    }
+    setFormatError(null)
+    setDraftContent(formatted)
+  }
+
+  async function handleConfirmSave() {
     if (draftContent === null) return
     setSaving(true)
     setSaveError(null)
     try {
       await updateStackRaw(stack.name, draftContent)
       setRawContent(draftContent)
+      setConfirmingSave(false)
       onSaved()
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'failed to save')
@@ -89,8 +112,10 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
   const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? null)
   const extraFields = Object.entries(meta).filter(([key]) => !KNOWN_FIELDS.has(key))
 
+  const hasContainers = containers.length > 0
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Box size={22} className="text-neutral-400 dark:text-neutral-500" />
@@ -132,126 +157,180 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
         </div>
       )}
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
-        <div>
-          <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Domain</dt>
-          <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
-            {domain ? (
-              <a
-                href={`http://${domain}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 hover:text-neutral-900 dark:hover:text-neutral-100"
-              >
-                {domain}
-                <ExternalLink size={12} />
-              </a>
-            ) : (
-              '—'
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Port</dt>
-          <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{port ?? '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Proxied service</dt>
-          <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{service ?? '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Services</dt>
-          <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{stack.services.join(', ') || '—'}</dd>
-        </div>
-        <div className="col-span-2 sm:col-span-3">
-          <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Compose file</dt>
-          <dd className="mt-0.5 truncate font-mono text-xs text-neutral-500 dark:text-neutral-400">{stack.path}</dd>
-        </div>
-        {extraFields.map(([key, value]) => (
-          <div key={key}>
-            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">{key}</dt>
-            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{String(value)}</dd>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <dl className={`grid grid-cols-2 gap-x-6 gap-y-3 text-sm ${hasContainers ? '' : 'lg:col-span-2 sm:grid-cols-3'}`}>
+          <div>
+            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Domain</dt>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
+              {domain ? (
+                <a
+                  href={`http://${domain}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 hover:text-neutral-900 dark:hover:text-neutral-100"
+                >
+                  {domain}
+                  <ExternalLink size={12} />
+                </a>
+              ) : (
+                '—'
+              )}
+            </dd>
           </div>
-        ))}
-      </dl>
-
-      {containers.length > 0 && (
-        <div>
-          <h3 className="mb-2 text-xs uppercase text-neutral-400 dark:text-neutral-500">Containers</h3>
-          <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-neutral-200 text-xs uppercase text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
-                <tr>
-                  <th className="px-3 py-2 font-normal">Container</th>
-                  <th className="px-3 py-2 font-normal">State</th>
-                  <th className="px-3 py-2 font-normal">Health</th>
-                  <th className="px-3 py-2 font-normal">Restarts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {containers.map((c) => {
-                  const health = c.health ?? 'unknown'
-                  return (
-                    <tr key={c.name} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                      <td className="px-3 py-2 font-mono text-xs text-neutral-700 dark:text-neutral-200">{c.name}</td>
-                      <td className="px-3 py-2 text-neutral-700 dark:text-neutral-200">{c.state}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-xs ${HEALTH_BADGE[health as keyof typeof HEALTH_BADGE] ?? HEALTH_BADGE.unknown}`}
-                        >
-                          {health}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-neutral-700 dark:text-neutral-200">{c.restart_count}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div>
+            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Port</dt>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{port ?? '—'}</dd>
           </div>
-        </div>
-      )}
+          <div>
+            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Proxied service</dt>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{service ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Services</dt>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{stack.services.join(', ') || '—'}</dd>
+          </div>
+          {extraFields.map(([key, value]) => (
+            <div key={key}>
+              <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">{key}</dt>
+              <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{String(value)}</dd>
+            </div>
+          ))}
+        </dl>
 
-      <div className="grid h-[36rem] grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="flex min-h-0 flex-col gap-2 lg:col-span-1">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">compose.yaml</h3>
-            <div className="flex items-center gap-2">
-              {isDirty && <span className="text-xs text-neutral-400 dark:text-neutral-500">unsaved</span>}
-              <button
-                onClick={handleSaveRaw}
-                disabled={!isDirty || saving}
-                className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
+        {hasContainers && (
+          <div>
+            <h3 className="mb-2 text-xs uppercase text-neutral-400 dark:text-neutral-500">Containers</h3>
+            <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-neutral-200 text-xs uppercase text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
+                  <tr>
+                    <th className="px-3 py-2 font-normal">Container</th>
+                    <th className="px-3 py-2 font-normal">State</th>
+                    <th className="px-3 py-2 font-normal">Health</th>
+                    <th className="px-3 py-2 font-normal">Restarts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {containers.map((c) => {
+                    const health = c.health ?? 'unknown'
+                    return (
+                      <tr key={c.name} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                        <td className="px-3 py-2 font-mono text-xs text-neutral-700 dark:text-neutral-200">{c.name}</td>
+                        <td className="px-3 py-2 text-neutral-700 dark:text-neutral-200">{c.state}</td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-xs ${HEALTH_BADGE[health as keyof typeof HEALTH_BADGE] ?? HEALTH_BADGE.unknown}`}
+                          >
+                            {health}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-neutral-700 dark:text-neutral-200">{c.restart_count}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-          <textarea
-            value={draftContent ?? ''}
-            onChange={(e) => setDraftContent(e.target.value)}
-            spellCheck={false}
-            disabled={draftContent === null}
-            className="min-h-0 flex-1 resize-none rounded border border-neutral-300 bg-white p-3 font-mono text-xs text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-          />
-          {saveError && <p className="text-xs text-red-600 dark:text-red-400">{saveError}</p>}
-        </div>
-
-        <div className="flex min-h-0 flex-col gap-4 lg:col-span-2">
-          <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Terminal</h3>
-            <div className="min-h-0 flex-1">
-              <Terminal stackName={stack.name} containerName={primaryContainer} />
-            </div>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
-            <div className="min-h-0 flex-1">
-              <LogPanel lines={lines} />
-            </div>
-          </div>
-        </div>
+        )}
       </div>
+
+      <PanelGroup direction="horizontal" autoSaveId="litethaus-stackdetail-h" className="min-h-[24rem] flex-1">
+        <Panel defaultSize={35} minSize={20}>
+          <div className="flex h-full min-h-0 flex-col gap-2 pr-1">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">
+                {confirmingSave ? 'Review changes' : 'compose.yaml'}
+              </h3>
+              <div className="flex items-center gap-2">
+                {isDirty && !confirmingSave && (
+                  <span className="text-xs text-neutral-400 dark:text-neutral-500">unsaved</span>
+                )}
+                {confirmingSave ? (
+                  <>
+                    <button
+                      onClick={() => setConfirmingSave(false)}
+                      disabled={saving}
+                      className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    >
+                      Keep editing
+                    </button>
+                    <button
+                      onClick={handleConfirmSave}
+                      disabled={saving}
+                      className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    >
+                      {saving ? 'Saving…' : 'Confirm & Save'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleFormat}
+                      disabled={draftContent === null}
+                      className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    >
+                      Format
+                    </button>
+                    <button
+                      onClick={() => setConfirmingSave(true)}
+                      disabled={!isDirty}
+                      className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    >
+                      Save
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            {draftContent === null ? (
+              <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-neutral-200 text-xs text-neutral-400 dark:border-neutral-800 dark:text-neutral-600">
+                Loading…
+              </div>
+            ) : confirmingSave ? (
+              <YamlDiffView
+                original={rawContent ?? ''}
+                modified={draftContent}
+                className="min-h-0 flex-1 overflow-auto rounded border border-neutral-300 text-xs dark:border-neutral-700"
+              />
+            ) : (
+              <YamlEditor
+                value={draftContent}
+                onChange={setDraftContent}
+                className="min-h-0 flex-1 overflow-auto rounded border border-neutral-300 text-xs dark:border-neutral-700"
+              />
+            )}
+            {formatError && <p className="text-xs text-red-600 dark:text-red-400">{formatError}</p>}
+            {saveError && <p className="text-xs text-red-600 dark:text-red-400">{saveError}</p>}
+          </div>
+        </Panel>
+
+        <PanelResizeHandle className={H_HANDLE} />
+
+        <Panel defaultSize={65} minSize={30}>
+          <PanelGroup direction="vertical" autoSaveId="litethaus-stackdetail-v" className="pl-1">
+            <Panel defaultSize={50} minSize={15}>
+              <div className="flex h-full min-h-0 flex-col gap-2">
+                <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Terminal</h3>
+                <div className="min-h-0 flex-1">
+                  <Terminal stackName={stack.name} containerName={primaryContainer} />
+                </div>
+              </div>
+            </Panel>
+
+            <PanelResizeHandle className={V_HANDLE} />
+
+            <Panel defaultSize={50} minSize={15}>
+              <div className="flex h-full min-h-0 flex-col gap-2">
+                <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
+                <div className="min-h-0 flex-1">
+                  <LogPanel lines={lines} />
+                </div>
+              </div>
+            </Panel>
+          </PanelGroup>
+        </Panel>
+      </PanelGroup>
     </div>
   )
 }
