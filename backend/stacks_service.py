@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 _yaml = YAML()
 
+# Precedence order docker compose itself uses when no -f is given.
+COMPOSE_FILENAMES = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+
 
 @dataclass
 class Stack:
@@ -41,14 +44,23 @@ class StackService:
 
         stacks: dict[str, Stack] = {}
         for entry in sorted(stacks_dir.iterdir()):
-            compose_path = entry / "docker-compose.yaml"
-            if not entry.is_dir() or not compose_path.exists():
+            if not entry.is_dir():
+                continue
+            compose_path = self._find_compose_file(entry)
+            if compose_path is None:
                 continue
             stacks[entry.name] = self._parse(entry.name, compose_path)
 
         with self._lock:
             self._stacks = stacks
         return list(stacks.values())
+
+    def _find_compose_file(self, entry: Path) -> Path | None:
+        for filename in COMPOSE_FILENAMES:
+            candidate = entry / filename
+            if candidate.exists():
+                return candidate
+        return None
 
     def _parse(self, name: str, compose_path: Path) -> Stack:
         try:
