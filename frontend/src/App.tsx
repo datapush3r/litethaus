@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Loader2, Menu, PackageOpen } from 'lucide-react'
-import { createStack, fetchConfig, fetchStacks, fetchStatus, stackDown, stackUp, type Stack, type StackState } from './api'
+import {
+  createStack,
+  fetchConfig,
+  fetchStacks,
+  fetchStatus,
+  stackDown,
+  stackUp,
+  type Stack,
+  type StackState,
+  type StackStatus,
+} from './api'
 import { StackCard } from './components/StackCard'
 import { StackDetail } from './components/StackDetail'
 import { StackEditor } from './components/StackEditor'
@@ -50,6 +60,7 @@ function useRoute(): [Route, (route: Route) => void] {
 function App() {
   const [stacks, setStacks] = useState<Stack[] | null>(null)
   const [statuses, setStatuses] = useState<Record<string, StackState>>({})
+  const [health, setHealth] = useState<Record<string, StackStatus>>({})
   const [busy, setBusy] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
   const [route, navigate] = useRoute()
@@ -67,7 +78,8 @@ function App() {
     const entries = await Promise.all(
       list.filter((s) => !s.error).map(async (s) => [s.name, await fetchStatus(s.name)] as const),
     )
-    setStatuses(Object.fromEntries(entries))
+    setStatuses(Object.fromEntries(entries.map(([name, info]) => [name, info.status])))
+    setHealth(Object.fromEntries(entries))
   }, [])
 
   const refreshStacks = useCallback(async () => {
@@ -120,8 +132,9 @@ function App() {
     try {
       const running = statuses[stack.name] === 'running'
       await (running ? stackDown(stack.name) : stackUp(stack.name))
-      const status = await fetchStatus(stack.name)
-      setStatuses((prev) => ({ ...prev, [stack.name]: status }))
+      const info = await fetchStatus(stack.name)
+      setStatuses((prev) => ({ ...prev, [stack.name]: info.status }))
+      setHealth((prev) => ({ ...prev, [stack.name]: info }))
     } finally {
       setBusy((prev) => ({ ...prev, [stack.name]: false }))
     }
@@ -151,6 +164,7 @@ function App() {
       <Sidebar
         stacks={stacks ?? []}
         statuses={statuses}
+        health={health}
         loading={stacks === null}
         route={route}
         open={sidebarOpen}
@@ -209,6 +223,7 @@ function App() {
             <StackDetail
               stack={selectedStack}
               status={statuses[selectedStack.name] ?? null}
+              containers={health[selectedStack.name]?.containers ?? []}
               busy={!!busy[selectedStack.name]}
               onToggle={() => handleToggle(selectedStack)}
               onSaved={refreshStacks}
@@ -226,6 +241,7 @@ function App() {
                   key={stack.name}
                   stack={stack}
                   status={statuses[stack.name] ?? null}
+                  health={health[stack.name]?.health ?? null}
                   busy={!!busy[stack.name]}
                   onToggle={() => handleToggle(stack)}
                   onOpen={() => navigate({ view: 'stack', name: stack.name })}

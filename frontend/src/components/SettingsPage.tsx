@@ -16,6 +16,7 @@ interface FormState {
   https_mode: string
   acme_email: string
   theme: string
+  webhook_url: string
 }
 
 export function SettingsPage() {
@@ -26,6 +27,7 @@ export function SettingsPage() {
     https_mode: 'off',
     acme_email: '',
     theme: 'system',
+    webhook_url: '',
   })
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -42,6 +44,7 @@ export function SettingsPage() {
           https_mode: String(cfg.https_mode ?? 'off'),
           acme_email: String(cfg.acme_email ?? ''),
           theme: String(cfg.theme ?? 'system'),
+          webhook_url: String(cfg.webhook_url ?? ''),
         })
       })
       .catch(() => setLoadError('failed to load config'))
@@ -124,6 +127,21 @@ export function SettingsPage() {
           />
         </div>
       )}
+
+      <div>
+        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+          Health webhook URL
+        </label>
+        <input
+          value={form.webhook_url}
+          onChange={(e) => setForm((f) => ({ ...f, webhook_url: e.target.value }))}
+          placeholder="https://example.com/hooks/litethaus (optional)"
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+        />
+        <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+          POSTed as JSON when a stack becomes unhealthy or enters a restart loop. Leave blank to disable.
+        </p>
+      </div>
 
       <div>
         <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">Theme</label>

@@ -1,16 +1,17 @@
 import { AlertTriangle, Box, ExternalLink } from 'lucide-react'
-import type { Stack, StackState } from '../api'
-import { STATUS_BADGE } from '../statusStyles'
+import type { HealthState, Stack, StackState } from '../api'
+import { BAD_HEALTH, STATUS_BADGE } from '../statusStyles'
 
 interface StackCardProps {
   stack: Stack
   status: StackState | null
+  health: HealthState | null
   busy: boolean
   onToggle: () => void
   onOpen: () => void
 }
 
-export function StackCard({ stack, status, busy, onToggle, onOpen }: StackCardProps) {
+export function StackCard({ stack, status, health, busy, onToggle, onOpen }: StackCardProps) {
   const domain = typeof stack.x_litethaus.domain === 'string' ? stack.x_litethaus.domain : null
 
   return (
@@ -22,6 +23,11 @@ export function StackCard({ stack, status, busy, onToggle, onOpen }: StackCardPr
         <div className="flex items-center gap-2">
           <Box size={18} className="text-neutral-400 dark:text-neutral-500" />
           <span className="font-medium text-neutral-900 dark:text-neutral-100">{stack.name}</span>
+          {health && BAD_HEALTH.has(health) && (
+            <span title={health}>
+              <AlertTriangle size={14} className="text-red-500" />
+            </span>
+          )}
         </div>
         {status && (
           <span className={`rounded-full border px-2 py-0.5 text-xs ${STATUS_BADGE[status]}`}>{status}</span>

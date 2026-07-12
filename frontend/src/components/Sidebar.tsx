@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Folder, Plus, Settings as SettingsIcon } from 'lucide-react'
-import type { Stack, StackState } from '../api'
+import { AlertTriangle, ChevronDown, ChevronRight, Folder, Plus, Settings as SettingsIcon } from 'lucide-react'
+import type { Stack, StackState, StackStatus } from '../api'
 import type { Route } from '../routing'
-import { STATUS_DOT } from '../statusStyles'
+import { BAD_HEALTH, STATUS_DOT } from '../statusStyles'
 
 interface SidebarProps {
   stacks: Stack[]
   statuses: Record<string, StackState>
+  health: Record<string, StackStatus>
   loading: boolean
   route: Route
   open: boolean
@@ -15,7 +16,17 @@ interface SidebarProps {
   onNewStack: () => void
 }
 
-export function Sidebar({ stacks, statuses, loading, route, open, onSelectStack, onOpenSettings, onNewStack }: SidebarProps) {
+export function Sidebar({
+  stacks,
+  statuses,
+  health,
+  loading,
+  route,
+  open,
+  onSelectStack,
+  onOpenSettings,
+  onNewStack,
+}: SidebarProps) {
   const [expanded, setExpanded] = useState(true)
   const selected = route.view === 'stack' ? route.name : null
 
@@ -76,6 +87,9 @@ export function Sidebar({ stacks, statuses, loading, route, open, onSelectStack,
                   }`}
                 />
                 <span className="truncate">{stack.name}</span>
+                {health[stack.name] && BAD_HEALTH.has(health[stack.name].health) && (
+                  <AlertTriangle size={12} className="ml-auto shrink-0 text-red-500" />
+                )}
               </button>
             </li>
           ))}

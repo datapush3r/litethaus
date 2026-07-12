@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from caddy_service import caddy_service
 from config_service import config_service
 from docker_service import docker_service
+from health_service import health_service
 from stacks_service import stack_service
 
 
@@ -17,6 +18,7 @@ from stacks_service import stack_service
 async def lifespan(app: FastAPI):
     stack_service.scan()
     threading.Thread(target=stack_service.watch_forever, daemon=True).start()
+    threading.Thread(target=health_service.watch_forever, daemon=True).start()
     caddy_service.sync(stack_service.list_stacks())
     yield
 
@@ -106,8 +108,13 @@ def remove_stack(name: str) -> dict[str, bool]:
 
 
 @app.get("/stacks/{name}/status")
-def stack_status(name: str) -> dict[str, str]:
-    return {"status": docker_service.container_status(_get_stack(name))}
+def stack_status(name: str) -> dict[str, Any]:
+    details = docker_service.container_details(_get_stack(name))
+    return {
+        "status": docker_service.status_from_details(details),
+        "health": docker_service.summarize_health(details),
+        "containers": details,
+    }
 
 
 @app.post("/stacks/{name}/up")

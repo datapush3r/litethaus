@@ -1,6 +1,7 @@
 import asyncio
 import subprocess
 from collections.abc import AsyncIterator
+from typing import Any
 
 import docker
 from docker.errors import NotFound
@@ -8,6 +9,7 @@ from docker.errors import NotFound
 from stacks_service import Stack
 
 NETWORK_NAME = "litethaus"
+BAD_HEALTH_STATES = {"unhealthy", "restarting"}
 
 
 class DockerService:
@@ -54,18 +56,53 @@ class DockerService:
             if process.returncode is None:
                 process.terminate()
 
-    def container_status(self, stack: Stack) -> str:
+    def container_details(self, stack: Stack) -> list[dict[str, Any]]:
         containers = self.client.containers.list(
             all=True, filters={"label": f"com.docker.compose.project={stack.name}"}
         )
-        if not containers:
+        return [self._describe(c) for c in containers]
+
+    @staticmethod
+    def _describe(container: Any) -> dict[str, Any]:
+        health = ((container.attrs.get("State") or {}).get("Health") or {}).get("Status")
+        return {
+            "name": container.name,
+            "state": container.status,
+            "health": health,
+            "restart_count": container.attrs.get("RestartCount", 0),
+        }
+
+    def container_status(self, stack: Stack) -> str:
+        return self.status_from_details(self.container_details(stack))
+
+    @staticmethod
+    def status_from_details(details: list[dict[str, Any]]) -> str:
+        if not details:
             return "stopped"
-        states = {c.status for c in containers}
+        states = {d["state"] for d in details}
         if states == {"running"}:
             return "running"
         if "running" in states:
             return "partial"
         return "stopped"
+
+    @staticmethod
+    def summarize_health(details: list[dict[str, Any]]) -> str:
+        if not details:
+            return "unknown"
+        # A container's own "restarting" state is Docker's live signal for a
+        # restart loop - more reliable than RestartCount, which is a lifetime
+        # total that never resets and says nothing about "right now".
+        if "restarting" in {d["state"] for d in details}:
+            return "restarting"
+        healths = {d["health"] for d in details if d["health"] is not None}
+        if "unhealthy" in healths:
+            return "unhealthy"
+        if "starting" in healths:
+            return "starting"
+        if healths and healths == {"healthy"}:
+            return "healthy"
+        return "unknown"
 
 
 docker_service = DockerService()

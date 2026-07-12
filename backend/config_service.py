@@ -31,6 +31,11 @@ acme_email: ""
 
 # UI theme: "light", "dark", or "system"
 theme: system
+
+# Webhook URL to POST to when a stack becomes unhealthy or enters a restart
+# loop (JSON body: {"stack": name, "health": "unhealthy"|"restarting"}).
+# Leave blank to disable.
+webhook_url: ""
 """
 
 

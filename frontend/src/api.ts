@@ -7,16 +7,29 @@ export interface Stack {
 }
 
 export type StackState = 'running' | 'partial' | 'stopped'
+export type HealthState = 'healthy' | 'unhealthy' | 'restarting' | 'starting' | 'unknown'
+
+export interface ContainerInfo {
+  name: string
+  state: string
+  health: string | null
+  restart_count: number
+}
+
+export interface StackStatus {
+  status: StackState
+  health: HealthState
+  containers: ContainerInfo[]
+}
 
 export async function fetchStacks(): Promise<Stack[]> {
   const res = await fetch('/api/stacks')
   return res.json()
 }
 
-export async function fetchStatus(name: string): Promise<StackState> {
+export async function fetchStatus(name: string): Promise<StackStatus> {
   const res = await fetch(`/api/stacks/${name}/status`)
-  const data = await res.json()
-  return data.status
+  return res.json()
 }
 
 export async function stackUp(name: string): Promise<{ ok: boolean; output: string }> {
@@ -77,6 +90,7 @@ export interface Config {
   https_mode: string
   acme_email: string
   theme: string
+  webhook_url: string
   [key: string]: unknown
 }
 

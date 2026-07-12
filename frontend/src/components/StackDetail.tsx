@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Box, ExternalLink } from 'lucide-react'
-import { deleteStack, fetchStackRaw, logsSocketUrl, updateStackRaw, type Stack, type StackState } from '../api'
-import { STATUS_BADGE } from '../statusStyles'
+import {
+  deleteStack,
+  fetchStackRaw,
+  logsSocketUrl,
+  updateStackRaw,
+  type ContainerInfo,
+  type Stack,
+  type StackState,
+} from '../api'
+import { HEALTH_BADGE, STATUS_BADGE } from '../statusStyles'
 import { LogPanel } from './LogPanel'
 import { StackEditor } from './StackEditor'
 
 interface StackDetailProps {
   stack: Stack
   status: StackState | null
+  containers: ContainerInfo[]
   busy: boolean
   onToggle: () => void
   onSaved: () => void
@@ -16,7 +25,7 @@ interface StackDetailProps {
 
 const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon'])
 
-export function StackDetail({ stack, status, busy, onToggle, onSaved, onDeleted }: StackDetailProps) {
+export function StackDetail({ stack, status, containers, busy, onToggle, onSaved, onDeleted }: StackDetailProps) {
   const [lines, setLines] = useState<string[]>([])
   const [rawContent, setRawContent] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -162,6 +171,43 @@ export function StackDetail({ stack, status, busy, onToggle, onSaved, onDeleted 
           </div>
         ))}
       </dl>
+
+      {containers.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-xs uppercase text-neutral-400 dark:text-neutral-500">Containers</h3>
+          <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-neutral-200 text-xs uppercase text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
+                <tr>
+                  <th className="px-3 py-2 font-normal">Container</th>
+                  <th className="px-3 py-2 font-normal">State</th>
+                  <th className="px-3 py-2 font-normal">Health</th>
+                  <th className="px-3 py-2 font-normal">Restarts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {containers.map((c) => {
+                  const health = c.health ?? 'unknown'
+                  return (
+                    <tr key={c.name} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                      <td className="px-3 py-2 font-mono text-xs text-neutral-700 dark:text-neutral-200">{c.name}</td>
+                      <td className="px-3 py-2 text-neutral-700 dark:text-neutral-200">{c.state}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-xs ${HEALTH_BADGE[health as keyof typeof HEALTH_BADGE] ?? HEALTH_BADGE.unknown}`}
+                        >
+                          {health}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-neutral-700 dark:text-neutral-200">{c.restart_count}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div>
         <h3 className="mb-2 text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
