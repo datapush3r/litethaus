@@ -3,11 +3,12 @@ __pycache__/
 .venv/
 docker-compose.override.local.yaml
 
-# Live instance config - holds host-specific settings and the admin
-# password hash. ConfigService auto-generates this with defaults on
-# first run (see backend/config_service.py DEFAULT_CONFIG), so it
-# never needs to be tracked or shipped as seed data.
-data/config.yaml
+# Live instance data - host-specific config/stacks from running the dev
+# sandbox, not seed data.
+data/
+
+# Scratch todo list, not for the public repo.
+TODO
 
 # Agent-facing project instructions - kept local/private, not shipped
 # in the public repo.
