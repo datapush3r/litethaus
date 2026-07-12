@@ -1,14 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Loader2, Menu, PackageOpen } from 'lucide-react'
-import { fetchConfig, fetchStacks, fetchStatus, stackDown, stackUp, type Stack, type StackState } from './api'
+import { createStack, fetchConfig, fetchStacks, fetchStatus, stackDown, stackUp, type Stack, type StackState } from './api'
 import { StackCard } from './components/StackCard'
 import { StackDetail } from './components/StackDetail'
+import { StackEditor } from './components/StackEditor'
 import { SettingsPage } from './components/SettingsPage'
 import { Sidebar } from './components/Sidebar'
 import { parseRoute, routePath, type Route } from './routing'
 import { setThemePreference } from './theme'
 
 const STATUS_POLL_MS = 5000
+
+const NEW_STACK_TEMPLATE = `x-litethaus:
+  domain: app.home.arpa
+  port: 80
+
+services:
+  app:
+    image: nginx:alpine
+    restart: unless-stopped
+    networks:
+      - litethaus
+
+networks:
+  litethaus:
+    external: true
+`
 
 function useRoute(): [Route, (route: Route) => void] {
   const [path, setPath] = useState(() => window.location.pathname)
@@ -52,6 +69,18 @@ function App() {
     )
     setStatuses(Object.fromEntries(entries))
   }, [])
+
+  const refreshStacks = useCallback(async () => {
+    const list = await fetchStacks()
+    setStacks(list)
+    await refreshStatuses(list)
+  }, [refreshStatuses])
+
+  async function handleCreate(name: string, content: string) {
+    await createStack(name, content)
+    await refreshStacks()
+    navigate({ view: 'stack', name })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -100,8 +129,14 @@ function App() {
 
   const selectedStack = route.view === 'stack' ? (stacks?.find((s) => s.name === route.name) ?? null) : null
 
+  const listView = route.view === 'stacks' || route.view === 'stack'
+
   const heading =
-    route.view === 'settings' ? 'Settings' : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
+    route.view === 'settings'
+      ? 'Settings'
+      : route.view === 'new'
+        ? 'New Stack'
+        : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
 
   return (
     <div className="flex min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -121,6 +156,7 @@ function App() {
         open={sidebarOpen}
         onSelectStack={(name) => navigate(name ? { view: 'stack', name } : { view: 'stacks' })}
         onOpenSettings={() => navigate({ view: 'settings' })}
+        onNewStack={() => navigate({ view: 'new' })}
       />
 
       <div className="min-w-0 flex-1">
@@ -138,21 +174,31 @@ function App() {
         <main className="p-4 sm:p-6">
           {route.view === 'settings' && <SettingsPage />}
 
-          {route.view !== 'settings' && error && (
+          {route.view === 'new' && (
+            <StackEditor
+              title="New Stack"
+              nameEditable
+              initialContent={NEW_STACK_TEMPLATE}
+              onSave={handleCreate}
+              onCancel={() => navigate({ view: 'stacks' })}
+            />
+          )}
+
+          {listView && error && (
             <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
               <AlertTriangle size={16} />
               {error}
             </div>
           )}
 
-          {route.view !== 'settings' && !error && stacks === null && (
+          {listView && !error && stacks === null && (
             <div className="flex items-center gap-2 text-sm text-neutral-400 dark:text-neutral-500">
               <Loader2 size={16} className="animate-spin" />
               Loading stacks…
             </div>
           )}
 
-          {route.view !== 'settings' && stacks !== null && stacks.length === 0 && (
+          {listView && stacks !== null && stacks.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-16 text-center text-neutral-400 dark:text-neutral-500">
               <PackageOpen size={28} />
               <p className="text-sm">No stacks found. Add one under stacks_dir.</p>
@@ -165,6 +211,11 @@ function App() {
               status={statuses[selectedStack.name] ?? null}
               busy={!!busy[selectedStack.name]}
               onToggle={() => handleToggle(selectedStack)}
+              onSaved={refreshStacks}
+              onDeleted={() => {
+                navigate({ view: 'stacks' })
+                refreshStacks()
+              }}
             />
           )}
 

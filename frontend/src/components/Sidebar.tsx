@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Folder, Settings as SettingsIcon } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, Plus, Settings as SettingsIcon } from 'lucide-react'
 import type { Stack, StackState } from '../api'
 import type { Route } from '../routing'
 import { STATUS_DOT } from '../statusStyles'
@@ -12,9 +12,10 @@ interface SidebarProps {
   open: boolean
   onSelectStack: (name: string | null) => void
   onOpenSettings: () => void
+  onNewStack: () => void
 }
 
-export function Sidebar({ stacks, statuses, loading, route, open, onSelectStack, onOpenSettings }: SidebarProps) {
+export function Sidebar({ stacks, statuses, loading, route, open, onSelectStack, onOpenSettings, onNewStack }: SidebarProps) {
   const [expanded, setExpanded] = useState(true)
   const selected = route.view === 'stack' ? route.name : null
 
@@ -46,6 +47,15 @@ export function Sidebar({ stacks, statuses, loading, route, open, onSelectStack,
           Stacks
         </button>
         <span className="pr-1 text-xs text-neutral-400 dark:text-neutral-600">{stacks.length}</span>
+        <button
+          onClick={onNewStack}
+          className={`text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 ${
+            route.view === 'new' ? 'text-neutral-900 dark:text-neutral-100' : ''
+          }`}
+          aria-label="New stack"
+        >
+          <Plus size={14} />
+        </button>
       </div>
 
       {expanded && (

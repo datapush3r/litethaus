@@ -65,6 +65,42 @@ def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -
         assert stacks["prefers-compose-yaml"].services == ["new"]
 
 
+def test_create_write_and_delete_stack_round_trip() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = StackService(stacks_dir=Path(tmp))
+
+        created = svc.create_stack("web", "services:\n  app:\n    image: nginx:alpine\n")
+        assert created.services == ["app"]
+        assert created.path.endswith("compose.yaml")
+
+        try:
+            svc.create_stack("web", "services: {}\n")
+            assert False, "expected duplicate name to raise"
+        except ValueError:
+            pass
+
+        try:
+            svc.create_stack("bad name", "services: {}\n")
+            assert False, "expected invalid name to raise"
+        except ValueError:
+            pass
+
+        try:
+            svc.write_raw("web", "services: [this is not: valid: yaml")
+            assert False, "expected invalid yaml to raise"
+        except Exception:
+            pass
+        # a rejected write must not clobber the file it failed to replace
+        assert svc.read_raw("web") == "services:\n  app:\n    image: nginx:alpine\n"
+
+        updated = svc.write_raw("web", "services:\n  app:\n    image: nginx:latest\n")
+        assert svc.read_raw("web") == "services:\n  app:\n    image: nginx:latest\n"
+        assert updated.services == ["app"]
+
+        svc.delete_stack("web")
+        assert "web" not in {s.name for s in svc.list_stacks()}
+
+
 def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
     svc = StackService(stacks_dir=Path("/tmp"))
 
@@ -81,5 +117,6 @@ def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
 if __name__ == "__main__":
     test_scan_parses_metadata_and_isolates_errors()
     test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order()
+    test_create_write_and_delete_stack_round_trip()
     test_restart_watcher_signals_the_current_stop_event_when_armed()
     print("ok")

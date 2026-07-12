@@ -29,6 +29,43 @@ export async function stackDown(name: string): Promise<{ ok: boolean; output: st
   return res.json()
 }
 
+async function unwrap<T>(res: Response, fallback: string): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.detail ?? fallback)
+  }
+  return res.json()
+}
+
+export async function fetchStackRaw(name: string): Promise<string> {
+  const res = await fetch(`/api/stacks/${name}/raw`)
+  const data = await unwrap<{ content: string }>(res, 'failed to load stack')
+  return data.content
+}
+
+export async function createStack(name: string, content: string): Promise<Stack> {
+  const res = await fetch('/api/stacks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, content }),
+  })
+  return unwrap<Stack>(res, 'failed to create stack')
+}
+
+export async function updateStackRaw(name: string, content: string): Promise<Stack> {
+  const res = await fetch(`/api/stacks/${name}/raw`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  return unwrap<Stack>(res, 'failed to save stack')
+}
+
+export async function deleteStack(name: string): Promise<void> {
+  const res = await fetch(`/api/stacks/${name}`, { method: 'DELETE' })
+  await unwrap(res, 'failed to delete stack')
+}
+
 export function logsSocketUrl(name: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/api/stacks/${name}/logs`

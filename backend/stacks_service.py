@@ -1,4 +1,6 @@
 import logging
+import re
+import shutil
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +17,8 @@ _yaml = YAML()
 
 # Precedence order docker compose itself uses when no -f is given.
 COMPOSE_FILENAMES = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+DEFAULT_COMPOSE_FILENAME = COMPOSE_FILENAMES[0]
+STACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 @dataclass
@@ -78,10 +82,52 @@ class StackService:
             return Stack(name=name, path=str(compose_path), error=str(exc))
 
     def list_stacks(self) -> list[Stack]:
+        # scan() takes self._lock itself, so it must never be called while
+        # already holding it (threading.Lock isn't reentrant) - do the
+        # empty-cache check and release the lock first.
         with self._lock:
-            if not self._stacks:
-                return self.scan()
-            return list(self._stacks.values())
+            has_scanned = bool(self._stacks)
+            stacks = list(self._stacks.values())
+        if not has_scanned:
+            return self.scan()
+        return stacks
+
+    def read_raw(self, name: str) -> str:
+        return Path(self._require(name).path).read_text()
+
+    def write_raw(self, name: str, content: str) -> Stack:
+        path = Path(self._require(name).path)
+        self._validate_yaml(content)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content)
+        tmp.replace(path)
+        self.scan()
+        return self._require(name)
+
+    def create_stack(self, name: str, content: str) -> Stack:
+        if not STACK_NAME_RE.match(name):
+            raise ValueError("stack name must be alphanumeric (dashes/underscores allowed)")
+        stack_dir = self.stacks_dir / name
+        if stack_dir.exists():
+            raise ValueError(f"stack {name!r} already exists")
+        self._validate_yaml(content)
+        stack_dir.mkdir(parents=True)
+        (stack_dir / DEFAULT_COMPOSE_FILENAME).write_text(content)
+        self.scan()
+        return self._require(name)
+
+    def delete_stack(self, name: str) -> None:
+        shutil.rmtree(Path(self._require(name).path).parent)
+        self.scan()
+
+    def _require(self, name: str) -> Stack:
+        stacks = {s.name: s for s in self.list_stacks()}
+        if name not in stacks:
+            raise KeyError(name)
+        return stacks[name]
+
+    def _validate_yaml(self, content: str) -> None:
+        _yaml.load(content)
 
     def watch_forever(self) -> None:
         # Re-reads self.stacks_dir on every restart, so a config change picked

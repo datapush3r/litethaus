@@ -64,6 +64,43 @@ def _get_stack(name: str):
     return stacks[name]
 
 
+@app.post("/stacks")
+def create_stack(body: dict[str, Any]) -> dict[str, Any]:
+    try:
+        stack = stack_service.create_stack(str(body["name"]), str(body["content"]))
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    caddy_service.sync(stack_service.list_stacks())
+    return asdict(stack)
+
+
+@app.get("/stacks/{name}/raw")
+def get_stack_raw(name: str) -> dict[str, str]:
+    _get_stack(name)
+    return {"content": stack_service.read_raw(name)}
+
+
+@app.put("/stacks/{name}/raw")
+def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    _get_stack(name)
+    try:
+        stack = stack_service.write_raw(name, str(body["content"]))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    caddy_service.sync(stack_service.list_stacks())
+    return asdict(stack)
+
+
+@app.delete("/stacks/{name}")
+def remove_stack(name: str) -> dict[str, bool]:
+    stack = _get_stack(name)
+    if docker_service.container_status(stack) != "stopped":
+        raise HTTPException(status_code=409, detail="stop the stack before deleting it")
+    stack_service.delete_stack(name)
+    caddy_service.sync(stack_service.list_stacks())
+    return {"ok": True}
+
+
 @app.get("/stacks/{name}/status")
 def stack_status(name: str) -> dict[str, str]:
     return {"status": docker_service.container_status(_get_stack(name))}
