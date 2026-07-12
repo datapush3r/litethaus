@@ -1,4 +1,5 @@
 import tempfile
+import threading
 from pathlib import Path
 
 from stacks_service import StackService
@@ -64,7 +65,21 @@ def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -
         assert stacks["prefers-compose-yaml"].services == ["new"]
 
 
+def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
+    svc = StackService(stacks_dir=Path("/tmp"))
+
+    assert svc._watch_stop_event is None
+    svc.restart_watcher()  # no watcher running yet: must be a safe no-op
+
+    stop_event = threading.Event()
+    svc._watch_stop_event = stop_event
+    svc.restart_watcher()
+
+    assert stop_event.is_set()
+
+
 if __name__ == "__main__":
     test_scan_parses_metadata_and_isolates_errors()
     test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order()
+    test_restart_watcher_signals_the_current_stop_event_when_armed()
     print("ok")

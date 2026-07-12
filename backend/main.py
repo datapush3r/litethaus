@@ -43,7 +43,13 @@ def get_config() -> dict[str, Any]:
 
 @app.patch("/config")
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
-    return dict(config_service.update(patch))
+    old_stacks_dir = config_service.load().get("stacks_dir")
+    updated = config_service.update(patch)
+    if updated.get("stacks_dir") != old_stacks_dir:
+        stack_service.scan()
+        stack_service.restart_watcher()
+        caddy_service.sync(stack_service.list_stacks())
+    return dict(updated)
 
 
 @app.get("/stacks")

@@ -31,6 +31,7 @@ class StackService:
         self._stacks_dir_override = stacks_dir
         self._lock = threading.Lock()
         self._stacks: dict[str, Stack] = {}
+        self._watch_stop_event: threading.Event | None = None
 
     @property
     def stacks_dir(self) -> Path:
@@ -83,8 +84,18 @@ class StackService:
             return list(self._stacks.values())
 
     def watch_forever(self) -> None:
-        for _ in watch(self.stacks_dir, recursive=True):
-            self.scan()
+        # Re-reads self.stacks_dir on every restart, so a config change picked
+        # up via restart_watcher() moves the watch to the new directory
+        # instead of leaving it stuck watching wherever it started.
+        while True:
+            stop_event = threading.Event()
+            self._watch_stop_event = stop_event
+            for _ in watch(self.stacks_dir, recursive=True, stop_event=stop_event):
+                self.scan()
+
+    def restart_watcher(self) -> None:
+        if self._watch_stop_event is not None:
+            self._watch_stop_event.set()
 
 
 stack_service = StackService()
