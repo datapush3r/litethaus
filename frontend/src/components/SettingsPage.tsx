@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { fetchConfig, updateConfig, type Config } from '../api'
+import { setThemePreference } from '../theme'
 
 const THEME_OPTIONS = ['system', 'light', 'dark'] as const
 
@@ -37,6 +39,7 @@ export function SettingsPage() {
     try {
       const updated = await updateConfig({ ...form })
       setConfig(updated)
+      setThemePreference(form.theme)
       setSaved(true)
     } catch {
       setSaveError('failed to save config')
@@ -45,35 +48,45 @@ export function SettingsPage() {
     }
   }
 
-  if (loadError) return <p className="text-sm text-red-400">{loadError}</p>
-  if (!config) return <p className="text-sm text-neutral-500">Loading settings…</p>
+  if (loadError) return <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+  if (!config)
+    return (
+      <div className="flex items-center gap-2 text-sm text-neutral-400 dark:text-neutral-500">
+        <Loader2 size={16} className="animate-spin" />
+        Loading settings…
+      </div>
+    )
 
   return (
     <div className="flex max-w-lg flex-col gap-5">
       <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-500">Stacks directory</label>
+        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+          Stacks directory
+        </label>
         <input
           value={form.stacks_dir}
           onChange={(e) => setForm((f) => ({ ...f, stacks_dir: e.target.value }))}
-          className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
       </div>
 
       <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-500">Caddy admin URL</label>
+        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+          Caddy admin URL
+        </label>
         <input
           value={form.caddy_admin_url}
           onChange={(e) => setForm((f) => ({ ...f, caddy_admin_url: e.target.value }))}
-          className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
       </div>
 
       <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-500">Theme</label>
+        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">Theme</label>
         <select
           value={form.theme}
           onChange={(e) => setForm((f) => ({ ...f, theme: e.target.value }))}
-          className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         >
           {THEME_OPTIONS.map((t) => (
             <option key={t} value={t}>
@@ -87,12 +100,12 @@ export function SettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
+          className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
-        {saved && <span className="text-xs text-green-400">Saved</span>}
-        {saveError && <span className="text-xs text-red-400">{saveError}</span>}
+        {saved && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
+        {saveError && <span className="text-xs text-red-600 dark:text-red-400">{saveError}</span>}
       </div>
     </div>
   )
