@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { fetchStacks, fetchStatus, stackDown, stackUp, type Stack, type StackState } from './api'
 import { StackCard } from './components/StackCard'
 import { LogViewer } from './components/LogViewer'
+import { Sidebar } from './components/Sidebar'
 
 const STATUS_POLL_MS = 5000
 
@@ -11,6 +12,7 @@ function App() {
   const [busy, setBusy] = useState<Record<string, boolean>>({})
   const [logsFor, setLogsFor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
 
   const refreshStatuses = useCallback(async (list: Stack[]) => {
     const entries = await Promise.all(
@@ -29,6 +31,7 @@ function App() {
         setStacks(list)
         setError(null)
         await refreshStatuses(list)
+        setSelected((prev) => (prev && !list.some((s) => s.name === prev) ? null : prev))
       } catch {
         if (!cancelled) setError('backend unreachable')
       }
@@ -54,36 +57,42 @@ function App() {
     }
   }
 
+  const visibleStacks = stacks?.filter((s) => selected === null || s.name === selected) ?? []
+
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <header className="border-b border-neutral-800 px-6 py-4">
-        <h1 className="text-lg font-semibold">litethaus</h1>
-      </header>
+    <div className="flex min-h-screen bg-neutral-950 text-neutral-100">
+      <Sidebar stacks={stacks ?? []} statuses={statuses} selected={selected} onSelect={setSelected} />
 
-      <main className="p-6">
-        {error && <p className="text-sm text-red-400">{error}</p>}
+      <div className="flex-1">
+        <header className="border-b border-neutral-800 px-6 py-4">
+          <h1 className="text-sm text-neutral-400">Stacks{selected ? ` / ${selected}` : ''}</h1>
+        </header>
 
-        {!error && stacks === null && <p className="text-sm text-neutral-500">Loading stacks…</p>}
+        <main className="p-6">
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
-        {stacks !== null && stacks.length === 0 && (
-          <p className="text-sm text-neutral-500">No stacks found. Add one under stacks_dir.</p>
-        )}
+          {!error && stacks === null && <p className="text-sm text-neutral-500">Loading stacks…</p>}
 
-        {stacks !== null && stacks.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {stacks.map((stack) => (
-              <StackCard
-                key={stack.name}
-                stack={stack}
-                status={statuses[stack.name] ?? null}
-                busy={!!busy[stack.name]}
-                onToggle={() => handleToggle(stack)}
-                onViewLogs={() => setLogsFor(stack.name)}
-              />
-            ))}
-          </div>
-        )}
-      </main>
+          {stacks !== null && stacks.length === 0 && (
+            <p className="text-sm text-neutral-500">No stacks found. Add one under stacks_dir.</p>
+          )}
+
+          {stacks !== null && stacks.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {visibleStacks.map((stack) => (
+                <StackCard
+                  key={stack.name}
+                  stack={stack}
+                  status={statuses[stack.name] ?? null}
+                  busy={!!busy[stack.name]}
+                  onToggle={() => handleToggle(stack)}
+                  onViewLogs={() => setLogsFor(stack.name)}
+                />
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
 
       {logsFor && <LogViewer stackName={logsFor} onClose={() => setLogsFor(null)} />}
     </div>

@@ -1,11 +1,6 @@
 import { AlertTriangle, Box, ExternalLink, ScrollText } from 'lucide-react'
 import type { Stack, StackState } from '../api'
-
-const STATE_STYLES: Record<StackState, string> = {
-  running: 'bg-green-500/15 text-green-400 border-green-500/30',
-  partial: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
-  stopped: 'bg-neutral-500/15 text-neutral-400 border-neutral-500/30',
-}
+import { STATUS_BADGE } from '../statusStyles'
 
 interface StackCardProps {
   stack: Stack
@@ -26,7 +21,7 @@ export function StackCard({ stack, status, busy, onToggle, onViewLogs }: StackCa
           <span className="font-medium text-neutral-100">{stack.name}</span>
         </div>
         {status && (
-          <span className={`rounded-full border px-2 py-0.5 text-xs ${STATE_STYLES[status]}`}>{status}</span>
+          <span className={`rounded-full border px-2 py-0.5 text-xs ${STATUS_BADGE[status]}`}>{status}</span>
         )}
       </div>
 
