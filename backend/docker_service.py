@@ -42,9 +42,19 @@ class DockerService:
         result = subprocess.run(self._compose_cmd(stack, "down"), capture_output=True, text=True)
         return result.returncode == 0, result.stdout + result.stderr
 
-    async def stream_logs(self, stack: Stack) -> AsyncIterator[str]:
+    async def stream_logs(self, stack: Stack, container: str | None = None) -> AsyncIterator[str]:
+        # A single container's logs are streamed directly via `docker logs`
+        # rather than `docker compose logs <service>` - the caller already
+        # resolves `container` to an actual container name (see
+        # find_container()), which docker logs takes directly with no need
+        # to also know the service name from the compose file.
+        cmd = (
+            ["docker", "logs", "-f", "--tail", "100", container]
+            if container
+            else self._compose_cmd(stack, "logs", "-f", "--no-color", "--tail", "100")
+        )
         process = await asyncio.create_subprocess_exec(
-            *self._compose_cmd(stack, "logs", "-f", "--no-color", "--tail", "100"),
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )

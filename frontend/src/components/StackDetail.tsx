@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Box, ExternalLink } from 'lucide-react'
+import { AlertTriangle, ExternalLink } from 'lucide-react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
   deleteStack,
@@ -13,6 +13,8 @@ import {
 import { HEALTH_BADGE, STATUS_BADGE } from '../statusStyles'
 import { formatYaml } from '../yamlFormat'
 import { LogPanel } from './LogPanel'
+import { StackIcon } from './StackIcon'
+import { TabBar } from './TabBar'
 import { Terminal } from './Terminal'
 import { YamlDiffView } from './YamlDiffView'
 import { YamlEditor } from './YamlEditor'
@@ -42,13 +44,25 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
   const [confirmingSave, setConfirmingSave] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [selectedTerminalContainer, setSelectedTerminalContainer] = useState<string | null>(null)
+  const [selectedLogsContainer, setSelectedLogsContainer] = useState<string | null>(null)
+  const [activeFile, setActiveFile] = useState<string | null>(null)
+
+  const primaryContainer = containers.find((c) => c.state === 'running')?.name ?? containers[0]?.name ?? null
+  const activeTerminalContainer = containers.some((c) => c.name === selectedTerminalContainer)
+    ? selectedTerminalContainer
+    : primaryContainer
+  const activeLogsContainer = containers.some((c) => c.name === selectedLogsContainer)
+    ? selectedLogsContainer
+    : primaryContainer
+  const effectiveFile = stack.compose_files.includes(activeFile ?? '') ? activeFile : (stack.compose_files[0] ?? null)
 
   useEffect(() => {
     setLines([])
-    const ws = new WebSocket(logsSocketUrl(stack.name))
+    const ws = new WebSocket(logsSocketUrl(stack.name, activeLogsContainer))
     ws.onmessage = (event) => setLines((prev) => [...prev, event.data])
     return () => ws.close()
-  }, [stack.name])
+  }, [stack.name, activeLogsContainer])
 
   useEffect(() => {
     setDeleteError(null)
@@ -57,11 +71,11 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
     setConfirmingSave(false)
     setRawContent(null)
     setDraftContent(null)
-    fetchStackRaw(stack.name).then((content) => {
+    fetchStackRaw(stack.name, effectiveFile ?? undefined).then((content) => {
       setRawContent(content)
       setDraftContent(content)
     })
-  }, [stack.name])
+  }, [stack.name, effectiveFile])
 
   function handleFormat() {
     if (draftContent === null) return
@@ -79,7 +93,7 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
     setSaving(true)
     setSaveError(null)
     try {
-      await updateStackRaw(stack.name, draftContent)
+      await updateStackRaw(stack.name, draftContent, effectiveFile ?? undefined)
       setRawContent(draftContent)
       setConfirmingSave(false)
       onSaved()
@@ -104,7 +118,6 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
   }
 
   const isDirty = draftContent !== null && draftContent !== rawContent
-  const primaryContainer = containers.find((c) => c.state === 'running')?.name ?? containers[0]?.name ?? null
 
   const meta = stack.x_litethaus
   const domain = typeof meta.domain === 'string' ? meta.domain : null
@@ -118,7 +131,7 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
     <div className="flex h-full min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Box size={22} className="text-neutral-400 dark:text-neutral-500" />
+          <StackIcon icon={meta.icon} size={22} />
           <h2 className="text-lg font-medium text-neutral-900 dark:text-neutral-100">{stack.name}</h2>
           {status && (
             <span className={`rounded-full border px-2 py-0.5 text-xs ${STATUS_BADGE[status]}`}>{status}</span>
@@ -238,11 +251,17 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
       <PanelGroup direction="horizontal" autoSaveId="litethaus-stackdetail-h" className="min-h-[24rem] flex-1">
         <Panel defaultSize={35} minSize={20}>
           <div className="flex h-full min-h-0 flex-col gap-2 pr-1">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">
-                {confirmingSave ? 'Review changes' : 'compose.yaml'}
-              </h3>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
+              {confirmingSave ? (
+                <h3 className="shrink-0 text-xs uppercase text-neutral-400 dark:text-neutral-500">Review changes</h3>
+              ) : stack.compose_files.length > 1 ? (
+                <TabBar items={stack.compose_files} active={effectiveFile} onSelect={setActiveFile} />
+              ) : (
+                <h3 className="shrink-0 text-xs uppercase text-neutral-400 dark:text-neutral-500">
+                  {stack.compose_files[0] ?? 'compose.yaml'}
+                </h3>
+              )}
+              <div className="flex shrink-0 items-center gap-2">
                 {isDirty && !confirmingSave && (
                   <span className="text-xs text-neutral-400 dark:text-neutral-500">unsaved</span>
                 )}
@@ -311,9 +330,16 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
           <PanelGroup direction="vertical" autoSaveId="litethaus-stackdetail-v" className="pl-1">
             <Panel defaultSize={50} minSize={15}>
               <div className="flex h-full min-h-0 flex-col gap-2">
-                <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Terminal</h3>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="shrink-0 text-xs uppercase text-neutral-400 dark:text-neutral-500">Terminal</h3>
+                  <TabBar
+                    items={containers.map((c) => c.name)}
+                    active={activeTerminalContainer}
+                    onSelect={setSelectedTerminalContainer}
+                  />
+                </div>
                 <div className="min-h-0 flex-1">
-                  <Terminal stackName={stack.name} containerName={primaryContainer} />
+                  <Terminal stackName={stack.name} containerName={activeTerminalContainer} />
                 </div>
               </div>
             </Panel>
@@ -322,7 +348,14 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
 
             <Panel defaultSize={50} minSize={15}>
               <div className="flex h-full min-h-0 flex-col gap-2">
-                <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="shrink-0 text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
+                  <TabBar
+                    items={containers.map((c) => c.name)}
+                    active={activeLogsContainer}
+                    onSelect={setSelectedLogsContainer}
+                  />
+                </div>
                 <div className="min-h-0 flex-1">
                   <LogPanel lines={lines} />
                 </div>

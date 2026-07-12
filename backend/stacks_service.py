@@ -28,6 +28,10 @@ class Stack:
     x_litethaus: dict[str, Any] = field(default_factory=dict)
     services: list[str] = field(default_factory=list)
     error: str | None = None
+    # Every compose-named file found in the stack's directory, in docker
+    # compose's own precedence order - path/x_litethaus/services are always
+    # parsed from compose_files[0], the rest are only exposed for editing.
+    compose_files: list[str] = field(default_factory=list)
 
 
 class StackService:
@@ -51,23 +55,21 @@ class StackService:
         for entry in sorted(stacks_dir.iterdir()):
             if not entry.is_dir():
                 continue
-            compose_path = self._find_compose_file(entry)
-            if compose_path is None:
+            compose_paths = self._find_compose_files(entry)
+            if not compose_paths:
                 continue
-            stacks[entry.name] = self._parse(entry.name, compose_path)
+            stacks[entry.name] = self._parse(entry.name, compose_paths)
 
         with self._lock:
             self._stacks = stacks
         return list(stacks.values())
 
-    def _find_compose_file(self, entry: Path) -> Path | None:
-        for filename in COMPOSE_FILENAMES:
-            candidate = entry / filename
-            if candidate.exists():
-                return candidate
-        return None
+    def _find_compose_files(self, entry: Path) -> list[Path]:
+        return [entry / filename for filename in COMPOSE_FILENAMES if (entry / filename).exists()]
 
-    def _parse(self, name: str, compose_path: Path) -> Stack:
+    def _parse(self, name: str, compose_paths: list[Path]) -> Stack:
+        compose_path = compose_paths[0]
+        compose_files = [p.name for p in compose_paths]
         try:
             with compose_path.open("r") as f:
                 data = _yaml.load(f) or {}
@@ -76,10 +78,11 @@ class StackService:
                 path=str(compose_path),
                 x_litethaus=dict(data.get("x-litethaus") or {}),
                 services=list((data.get("services") or {}).keys()),
+                compose_files=compose_files,
             )
         except Exception as exc:
             logger.exception("Failed to parse %s", compose_path)
-            return Stack(name=name, path=str(compose_path), error=str(exc))
+            return Stack(name=name, path=str(compose_path), error=str(exc), compose_files=compose_files)
 
     def list_stacks(self) -> list[Stack]:
         # scan() takes self._lock itself, so it must never be called while
@@ -92,17 +95,24 @@ class StackService:
             return self.scan()
         return stacks
 
-    def read_raw(self, name: str) -> str:
-        return Path(self._require(name).path).read_text()
+    def read_raw(self, name: str, filename: str | None = None) -> str:
+        return self._resolve_file(self._require(name), filename).read_text()
 
-    def write_raw(self, name: str, content: str) -> Stack:
-        path = Path(self._require(name).path)
+    def write_raw(self, name: str, content: str, filename: str | None = None) -> Stack:
+        path = self._resolve_file(self._require(name), filename)
         self._validate_yaml(content)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(content)
         tmp.replace(path)
         self.scan()
         return self._require(name)
+
+    def _resolve_file(self, stack: Stack, filename: str | None) -> Path:
+        if filename is None:
+            return Path(stack.path)
+        if filename not in stack.compose_files:
+            raise KeyError(filename)
+        return Path(stack.path).parent / filename
 
     def create_stack(self, name: str, content: str) -> Stack:
         if not STACK_NAME_RE.match(name):

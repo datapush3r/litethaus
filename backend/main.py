@@ -153,16 +153,21 @@ def create_stack(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.get("/stacks/{name}/raw")
-def get_stack_raw(name: str) -> dict[str, str]:
+def get_stack_raw(name: str, file: str | None = None) -> dict[str, str]:
     _get_stack(name)
-    return {"content": stack_service.read_raw(name)}
+    try:
+        return {"content": stack_service.read_raw(name, file)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="file not found")
 
 
 @app.put("/stacks/{name}/raw")
 def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
     _get_stack(name)
     try:
-        stack = stack_service.write_raw(name, str(body["content"]))
+        stack = stack_service.write_raw(name, str(body["content"]), body.get("file"))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="file not found")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     caddy_service.sync(stack_service.list_stacks())
@@ -204,7 +209,7 @@ def stack_down(name: str) -> dict[str, Any]:
 
 
 @app.websocket("/stacks/{name}/logs")
-async def stack_logs(websocket: WebSocket, name: str) -> None:
+async def stack_logs(websocket: WebSocket, name: str, container: str | None = None) -> None:
     # HTTP middleware doesn't run for websocket connections, so the session
     # cookie (sent automatically on the same-origin upgrade request) needs
     # its own check here.
@@ -218,15 +223,22 @@ async def stack_logs(websocket: WebSocket, name: str) -> None:
         await websocket.close(code=4004)
         return
 
+    # `container`, when given, must resolve to an actual container of this
+    # stack - not trusted as a raw `docker logs` target.
+    if container is not None and docker_service.find_container(stack, container) is None:
+        await websocket.close(code=4004)
+        return
+
     await websocket.accept()
 
     async def forward_logs() -> None:
-        # `docker compose logs -f` exits as soon as there's nothing to tail
-        # (stack not up yet, or just stopped) rather than waiting for a
-        # container to appear. Re-attach instead of treating that as done,
-        # so a client watching a stopped stack picks up logs once it starts.
+        # `docker compose logs -f`/`docker logs -f` exit as soon as there's
+        # nothing to tail (stack not up yet, or just stopped) rather than
+        # waiting for a container to appear. Re-attach instead of treating
+        # that as done, so a client watching a stopped stack picks up logs
+        # once it starts.
         while True:
-            async with aclosing(docker_service.stream_logs(stack)) as lines:
+            async with aclosing(docker_service.stream_logs(stack, container)) as lines:
                 async for line in lines:
                     await websocket.send_text(line)
             await asyncio.sleep(1)

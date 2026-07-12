@@ -4,6 +4,7 @@ export interface Stack {
   x_litethaus: Record<string, unknown>
   services: string[]
   error: string | null
+  compose_files: string[]
 }
 
 export type StackState = 'running' | 'partial' | 'stopped'
@@ -50,8 +51,9 @@ async function unwrap<T>(res: Response, fallback: string): Promise<T> {
   return res.json()
 }
 
-export async function fetchStackRaw(name: string): Promise<string> {
-  const res = await fetch(`/api/stacks/${name}/raw`)
+export async function fetchStackRaw(name: string, file?: string): Promise<string> {
+  const qs = file ? `?file=${encodeURIComponent(file)}` : ''
+  const res = await fetch(`/api/stacks/${name}/raw${qs}`)
   const data = await unwrap<{ content: string }>(res, 'failed to load stack')
   return data.content
 }
@@ -65,11 +67,11 @@ export async function createStack(name: string, content: string): Promise<Stack>
   return unwrap<Stack>(res, 'failed to create stack')
 }
 
-export async function updateStackRaw(name: string, content: string): Promise<Stack> {
+export async function updateStackRaw(name: string, content: string, file?: string): Promise<Stack> {
   const res = await fetch(`/api/stacks/${name}/raw`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, file }),
   })
   return unwrap<Stack>(res, 'failed to save stack')
 }
@@ -79,9 +81,10 @@ export async function deleteStack(name: string): Promise<void> {
   await unwrap(res, 'failed to delete stack')
 }
 
-export function logsSocketUrl(name: string): string {
+export function logsSocketUrl(name: string, container?: string | null): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/api/stacks/${name}/logs`
+  const qs = container ? `?container=${encodeURIComponent(container)}` : ''
+  return `${protocol}//${window.location.host}/api/stacks/${name}/logs${qs}`
 }
 
 export function terminalSocketUrl(name: string, container: string): string {

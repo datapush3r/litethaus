@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Folder, LogOut, Plus, Setting
 import type { Stack, StackState, StackStatus } from '../api'
 import type { Route } from '../routing'
 import { BAD_HEALTH, STATUS_DOT } from '../statusStyles'
+import { StackIcon } from './StackIcon'
 
 interface SidebarProps {
   stacks: Stack[]
@@ -88,6 +89,7 @@ export function Sidebar({
                     stack.error ? 'bg-red-500' : STATUS_DOT[statuses[stack.name] ?? 'stopped']
                   }`}
                 />
+                <StackIcon icon={stack.x_litethaus.icon} size={14} />
                 <span className="truncate">{stack.name}</span>
                 {health[stack.name] && BAD_HEALTH.has(health[stack.name].health) && (
                   <AlertTriangle size={12} className="ml-auto shrink-0 text-red-500" />

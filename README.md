@@ -56,8 +56,8 @@ Per-stack settings live in each stack's compose file under `x-litethaus:`:
 x-litethaus:
   domain: myapp.home.arpa
   port: 8080
-  service: web      # optional: which service to proxy to, if there's more than one
-  icon: mdi:server  # optional
+  service: web    # optional: which service to proxy to, if there's more than one
+  icon: nginx     # optional: slug from https://github.com/homarr-labs/dashboard-icons
 ```
 
 ## Development

@@ -22,3 +22,6 @@ CLAUDE.md
 id_rsa*
 id_ed25519*
 *credentials*
+
+# Playwright MCP session output (screenshots, snapshots, console logs)
+.playwright-mcp/

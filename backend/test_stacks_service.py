@@ -63,6 +63,36 @@ def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -
 
         assert stacks["prefers-compose-yaml"].path.endswith("compose.yaml")
         assert stacks["prefers-compose-yaml"].services == ["new"]
+        assert stacks["prefers-compose-yaml"].compose_files == ["compose.yaml", "docker-compose.yaml"]
+        assert stacks["uses-compose-yaml"].compose_files == ["compose.yaml"]
+
+
+def test_multiple_compose_files_are_each_independently_readable_and_writable() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        stacks_dir = Path(tmp)
+        stack_dir = stacks_dir / "multi"
+        stack_dir.mkdir()
+        (stack_dir / "compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
+        (stack_dir / "docker-compose.yaml").write_text("services:\n  legacy:\n    image: nginx:alpine\n")
+
+        svc = StackService(stacks_dir=stacks_dir)
+        svc.scan()
+
+        assert svc.read_raw("multi") == "services:\n  web:\n    image: nginx:alpine\n"
+        assert svc.read_raw("multi", "compose.yaml") == "services:\n  web:\n    image: nginx:alpine\n"
+        assert svc.read_raw("multi", "docker-compose.yaml") == "services:\n  legacy:\n    image: nginx:alpine\n"
+
+        svc.write_raw("multi", "services:\n  legacy:\n    image: nginx:latest\n", "docker-compose.yaml")
+        assert svc.read_raw("multi", "docker-compose.yaml") == "services:\n  legacy:\n    image: nginx:latest\n"
+        # writing the non-primary file must not touch the primary one, or
+        # what docker compose/caddy actually read for this stack
+        assert svc.read_raw("multi", "compose.yaml") == "services:\n  web:\n    image: nginx:alpine\n"
+
+        try:
+            svc.read_raw("multi", "not-a-real-file.yaml")
+            assert False, "expected unknown filename to raise"
+        except KeyError:
+            pass
 
 
 def test_create_write_and_delete_stack_round_trip() -> None:
@@ -117,6 +147,7 @@ def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
 if __name__ == "__main__":
     test_scan_parses_metadata_and_isolates_errors()
     test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order()
+    test_multiple_compose_files_are_each_independently_readable_and_writable()
     test_create_write_and_delete_stack_round_trip()
     test_restart_watcher_signals_the_current_stop_event_when_armed()
     print("ok")

@@ -1,6 +1,7 @@
-import { AlertTriangle, Box, ExternalLink } from 'lucide-react'
+import { AlertTriangle, ExternalLink } from 'lucide-react'
 import type { HealthState, Stack, StackState } from '../api'
 import { BAD_HEALTH, STATUS_BADGE } from '../statusStyles'
+import { StackIcon } from './StackIcon'
 
 interface StackCardProps {
   stack: Stack
@@ -21,7 +22,7 @@ export function StackCard({ stack, status, health, busy, onToggle, onOpen }: Sta
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <Box size={18} className="text-neutral-400 dark:text-neutral-500" />
+          <StackIcon icon={stack.x_litethaus.icon} size={18} />
           <span className="font-medium text-neutral-900 dark:text-neutral-100">{stack.name}</span>
           {health && BAD_HEALTH.has(health) && (
             <span title={health}>
