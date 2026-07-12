@@ -84,6 +84,11 @@ export function logsSocketUrl(name: string): string {
   return `${protocol}//${window.location.host}/api/stacks/${name}/logs`
 }
 
+export function terminalSocketUrl(name: string, container: string): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/api/stacks/${name}/terminal?container=${encodeURIComponent(container)}`
+}
+
 export interface Config {
   stacks_dir: string
   caddy_admin_url: string

@@ -1,4 +1,5 @@
 import asyncio
+import os
 import threading
 from contextlib import aclosing, asynccontextmanager, suppress
 from dataclasses import asdict
@@ -248,3 +249,53 @@ async def stack_logs(websocket: WebSocket, name: str) -> None:
     for task in done:
         with suppress(WebSocketDisconnect):
             task.result()
+
+
+@app.websocket("/stacks/{name}/terminal")
+async def stack_terminal(websocket: WebSocket, name: str, container: str) -> None:
+    if auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
+        await websocket.close(code=4401)
+        return
+
+    stacks = {s.name: s for s in stack_service.list_stacks()}
+    stack = stacks.get(name)
+    if stack is None:
+        await websocket.close(code=4004)
+        return
+
+    # `container` must resolve to an actual container of this stack - not
+    # trusted as a raw docker exec target.
+    target = docker_service.find_container(stack, container)
+    if target is None:
+        await websocket.close(code=4004)
+        return
+
+    await websocket.accept()
+    master_fd, process = docker_service.exec_shell(target.name)
+    loop = asyncio.get_event_loop()
+
+    async def pump_output() -> None:
+        while True:
+            try:
+                data = await loop.run_in_executor(None, os.read, master_fd, 4096)
+            except OSError:
+                break
+            if not data:
+                break
+            await websocket.send_bytes(data)
+
+    async def pump_input() -> None:
+        with suppress(WebSocketDisconnect):
+            while True:
+                data = await websocket.receive_bytes()
+                await loop.run_in_executor(None, os.write, master_fd, data)
+
+    output_task = asyncio.create_task(pump_output())
+    input_task = asyncio.create_task(pump_input())
+    done, pending = await asyncio.wait({output_task, input_task}, return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+    process.terminate()
+    os.close(master_fd)

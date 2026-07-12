@@ -11,7 +11,7 @@ import {
 } from '../api'
 import { HEALTH_BADGE, STATUS_BADGE } from '../statusStyles'
 import { LogPanel } from './LogPanel'
-import { StackEditor } from './StackEditor'
+import { Terminal } from './Terminal'
 
 interface StackDetailProps {
   stack: Stack
@@ -28,6 +28,9 @@ const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon'])
 export function StackDetail({ stack, status, containers, busy, onToggle, onSaved, onDeleted }: StackDetailProps) {
   const [lines, setLines] = useState<string[]>([])
   const [rawContent, setRawContent] = useState<string | null>(null)
+  const [draftContent, setDraftContent] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -39,14 +42,29 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
   }, [stack.name])
 
   useEffect(() => {
-    setRawContent(null)
     setDeleteError(null)
+    setSaveError(null)
+    setRawContent(null)
+    setDraftContent(null)
+    fetchStackRaw(stack.name).then((content) => {
+      setRawContent(content)
+      setDraftContent(content)
+    })
   }, [stack.name])
 
-  async function handleSaveRaw(_name: string, content: string) {
-    await updateStackRaw(stack.name, content)
-    setRawContent(null)
-    onSaved()
+  async function handleSaveRaw() {
+    if (draftContent === null) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await updateStackRaw(stack.name, draftContent)
+      setRawContent(draftContent)
+      onSaved()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'failed to save')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete() {
@@ -62,17 +80,8 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
     }
   }
 
-  if (rawContent !== null) {
-    return (
-      <StackEditor
-        title={`Edit ${stack.name}`}
-        nameEditable={false}
-        initialContent={rawContent}
-        onSave={handleSaveRaw}
-        onCancel={() => setRawContent(null)}
-      />
-    )
-  }
+  const isDirty = draftContent !== null && draftContent !== rawContent
+  const primaryContainer = containers.find((c) => c.state === 'running')?.name ?? containers[0]?.name ?? null
 
   const meta = stack.x_litethaus
   const domain = typeof meta.domain === 'string' ? meta.domain : null
@@ -97,12 +106,6 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
             className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
             {status === 'running' ? 'Stop' : 'Start'}
-          </button>
-          <button
-            onClick={() => fetchStackRaw(stack.name).then(setRawContent)}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
-          >
-            Edit
           </button>
           <button
             onClick={handleDelete}
@@ -209,9 +212,45 @@ export function StackDetail({ stack, status, containers, busy, onToggle, onSaved
         </div>
       )}
 
-      <div>
-        <h3 className="mb-2 text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
-        <LogPanel lines={lines} />
+      <div className="grid h-[36rem] grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="flex min-h-0 flex-col gap-2 lg:col-span-1">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">compose.yaml</h3>
+            <div className="flex items-center gap-2">
+              {isDirty && <span className="text-xs text-neutral-400 dark:text-neutral-500">unsaved</span>}
+              <button
+                onClick={handleSaveRaw}
+                disabled={!isDirty || saving}
+                className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={draftContent ?? ''}
+            onChange={(e) => setDraftContent(e.target.value)}
+            spellCheck={false}
+            disabled={draftContent === null}
+            className="min-h-0 flex-1 resize-none rounded border border-neutral-300 bg-white p-3 font-mono text-xs text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          />
+          {saveError && <p className="text-xs text-red-600 dark:text-red-400">{saveError}</p>}
+        </div>
+
+        <div className="flex min-h-0 flex-col gap-4 lg:col-span-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Terminal</h3>
+            <div className="min-h-0 flex-1">
+              <Terminal stackName={stack.name} containerName={primaryContainer} />
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <h3 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
+            <div className="min-h-0 flex-1">
+              <LogPanel lines={lines} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

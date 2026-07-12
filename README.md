@@ -8,7 +8,8 @@ litethaus scans a directory of docker-compose stacks, gives you a dashboard to s
 
 - **Stack discovery** — scans a directory for one subfolder per stack, each with its own `compose.yaml` (or `compose.yml` / `docker-compose.yaml` / `docker-compose.yml`)
 - **Start/stop/logs** — control stacks and stream their logs live from the browser
-- **Stack authoring** — create, edit, and delete stacks from the UI via a raw compose YAML editor
+- **Stack authoring** — create, edit, and delete stacks from the UI via a raw compose YAML editor, edited inline on the stack page
+- **In-browser terminal** — a real shell into a stack's running container, next to its compose editor and live logs
 - **Automatic reverse proxy** — add an `x-litethaus:` block to a stack's compose file with a domain and port, and litethaus wires it into Caddy automatically
 - **Automatic HTTPS** — self-signed certs via Caddy's local CA (for `.home.arpa`/`.local` domains) or real ACME/Let's Encrypt certs for publicly resolvable domains
 - **Health monitoring** — per-container health and restart-loop status in the dashboard, with an optional webhook alert

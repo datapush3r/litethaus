@@ -1,4 +1,6 @@
 import asyncio
+import os
+import pty
 import subprocess
 from collections.abc import AsyncIterator
 from typing import Any
@@ -61,6 +63,36 @@ class DockerService:
             all=True, filters={"label": f"com.docker.compose.project={stack.name}"}
         )
         return [self._describe(c) for c in containers]
+
+    def find_container(self, stack: Stack, container_name: str) -> Any | None:
+        for c in self.client.containers.list(
+            all=True, filters={"label": f"com.docker.compose.project={stack.name}"}
+        ):
+            if c.name == container_name:
+                return c
+        return None
+
+    def exec_shell(self, container_name: str) -> tuple[int, subprocess.Popen]:
+        # Shells out to the `docker` CLI over a real pty, same approach as
+        # stream_logs() below - docker-py's low-level exec socket hijack
+        # (client.api.exec_start(..., socket=True)) delivers an immediate
+        # EOF on first read in this environment for reasons that didn't
+        # trace back to anything in our control; the CLI+pty path is what
+        # every terminal emulator does anyway and just works.
+        # Falls back to sh on minimal (alpine) images that have no bash.
+        # `command -v bash && exec bash || exec sh` (not `exec bash || exec
+        # sh`) - in POSIX shells, exec failing to find its target terminates
+        # the shell immediately rather than falling through to `||`.
+        master_fd, slave_fd = pty.openpty()
+        process = subprocess.Popen(
+            ["docker", "exec", "-i", "-t", container_name, "sh", "-c",
+             "command -v bash >/dev/null 2>&1 && exec bash || exec sh"],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+        )
+        os.close(slave_fd)
+        return master_fd, process
 
     @staticmethod
     def _describe(container: Any) -> dict[str, Any]:
