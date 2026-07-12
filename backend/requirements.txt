@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 ruamel.yaml
 watchfiles
+docker

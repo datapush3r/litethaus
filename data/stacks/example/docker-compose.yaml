@@ -3,9 +3,15 @@
 x-litethaus:
   domain: example.home.arpa
   icon: mdi:server
-  port: 8080
+  port: 80
+
+networks:
+  litethaus:
+    external: true
 
 services:
   web:
     image: nginx:alpine
     restart: unless-stopped
+    networks:
+      - litethaus

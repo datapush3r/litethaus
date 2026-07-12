@@ -6,6 +6,7 @@ services:
     volumes:
       - ./backend:/app
       - ./data:/opt/litethaus
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"
 
@@ -26,5 +27,14 @@ services:
     volumes:
       - ./caddy/Caddyfile:/etc/caddyfile
     command: caddy run --config /etc/caddyfile
+    ports:
+      - "80:80"
     expose:
       - "2019"
+    networks:
+      - default
+      - litethaus
+
+networks:
+  litethaus:
+    name: litethaus
