@@ -1,0 +1,11 @@
+# litethaus global configuration
+# Settings here control the dashboard and reverse proxy behavior.
+
+# Directory containing one subfolder per stack, each with its own docker-compose.yaml
+stacks_dir: /opt/litethaus/stacks
+
+# Base URL for the Caddy admin API used to push proxy config
+caddy_admin_url: http://caddy:2019
+
+# UI theme: "light", "dark", or "system"
+theme: system
