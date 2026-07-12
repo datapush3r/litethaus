@@ -36,7 +36,7 @@ Then open `http://localhost:5173`. On first run you'll be asked to set up an adm
 
 ## Configuration
 
-Global settings live in `config.yaml` (also editable from the Settings page):
+Global settings live in `config.yaml`, generated automatically with defaults on first run (also editable from the Settings page). It holds instance-specific state including the admin password hash, so it's gitignored rather than tracked — there's nothing to seed or copy manually:
 
 | Key | Description |
 |---|---|
