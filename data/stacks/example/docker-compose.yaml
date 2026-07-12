@@ -1,0 +1,11 @@
+# Example stack demonstrating the x-litethaus metadata block.
+# litethaus reads this extension field; it is invisible to `docker compose`.
+x-litethaus:
+  domain: example.home.arpa
+  icon: mdi:server
+  port: 8080
+
+services:
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
