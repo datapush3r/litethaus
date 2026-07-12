@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - CADDY_ADMIN_URL=http://caddy:2019
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:latest
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddyfile
+    command: caddy run --config /etc/caddyfile
+    expose:
+      - "2019"
