@@ -23,7 +23,8 @@ services:
       - backend
 
   caddy:
-    image: caddy:latest
+    build:
+      context: ./caddy
     volumes:
       - ./caddy/Caddyfile:/etc/caddyfile
     command: caddy run --config /etc/caddyfile

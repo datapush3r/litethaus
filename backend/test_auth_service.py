@@ -54,6 +54,15 @@ def test_change_password_requires_current_password() -> None:
         assert svc.verify_login("admin", "correct horse battery staple") is False
 
 
+def test_enabled_defaults_true_and_respects_config() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = _svc(tmp)
+        assert svc.enabled() is True
+
+        svc._config.update({"auth_enabled": False})
+        assert svc.enabled() is False
+
+
 def test_session_lifecycle() -> None:
     svc = AuthService()
     assert svc.is_valid_session(None) is False
@@ -70,5 +79,6 @@ if __name__ == "__main__":
     test_setup_login_and_reject_second_setup()
     test_setup_rejects_short_password()
     test_change_password_requires_current_password()
+    test_enabled_defaults_true_and_respects_config()
     test_session_lifecycle()
     print("ok")

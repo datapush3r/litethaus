@@ -43,10 +43,13 @@ Global settings live in `config.yaml`, generated automatically with defaults on 
 
 | Key | Description |
 |---|---|
+| `auth_enabled` | Whether the single-user login gate is enforced; set to `false` to disable auth entirely (local testing only — leaves every endpoint open) |
 | `stacks_dir` | Directory containing one subfolder per stack |
 | `caddy_admin_url` | Base URL for Caddy's admin API |
 | `https_mode` | `off`, `internal` (self-signed), or `acme` (Let's Encrypt) |
 | `acme_email` | Registration email, required when `https_mode` is `acme` |
+| `cloudflare_api_token` | Cloudflare API token for DNS-01 ACME challenges (Zone:Read + DNS:Edit); enables wildcard certs; leave blank for HTTP-01/TLS-ALPN-01 |
+| `wildcard_domain` | Issue one wildcard cert (`*.<domain>`) covering every stack instead of a cert per stack domain; requires `cloudflare_api_token`; leave blank for per-stack certs |
 | `theme` | `light`, `dark`, or `system` |
 | `webhook_url` | Optional webhook POSTed to when a stack becomes unhealthy or restart-loops |
 

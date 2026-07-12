@@ -15,6 +15,8 @@ interface FormState {
   caddy_admin_url: string
   https_mode: string
   acme_email: string
+  cloudflare_api_token: string
+  wildcard_domain: string
   theme: string
   webhook_url: string
 }
@@ -26,6 +28,8 @@ export function SettingsPage() {
     caddy_admin_url: '',
     https_mode: 'off',
     acme_email: '',
+    cloudflare_api_token: '',
+    wildcard_domain: '',
     theme: 'system',
     webhook_url: '',
   })
@@ -49,6 +53,8 @@ export function SettingsPage() {
           caddy_admin_url: String(cfg.caddy_admin_url ?? ''),
           https_mode: String(cfg.https_mode ?? 'off'),
           acme_email: String(cfg.acme_email ?? ''),
+          cloudflare_api_token: String(cfg.cloudflare_api_token ?? ''),
+          wildcard_domain: String(cfg.wildcard_domain ?? ''),
           theme: String(cfg.theme ?? 'system'),
           webhook_url: String(cfg.webhook_url ?? ''),
         })
@@ -137,17 +143,51 @@ export function SettingsPage() {
       </div>
 
       {form.https_mode === 'acme' && (
-        <div>
-          <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-            ACME email
-          </label>
-          <input
-            value={form.acme_email}
-            onChange={(e) => setForm((f) => ({ ...f, acme_email: e.target.value }))}
-            placeholder="you@example.com"
-            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-          />
-        </div>
+        <>
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              ACME email
+            </label>
+            <input
+              value={form.acme_email}
+              onChange={(e) => setForm((f) => ({ ...f, acme_email: e.target.value }))}
+              placeholder="you@example.com"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              Cloudflare API token
+            </label>
+            <input
+              type="password"
+              value={form.cloudflare_api_token}
+              onChange={(e) => setForm((f) => ({ ...f, cloudflare_api_token: e.target.value }))}
+              placeholder="optional — enables DNS-01 + wildcard certs"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              Needs Zone:Read + DNS:Edit permissions. Leave blank to use Caddy's default HTTP-01/TLS-ALPN-01 challenges.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              Wildcard domain
+            </label>
+            <input
+              value={form.wildcard_domain}
+              onChange={(e) => setForm((f) => ({ ...f, wildcard_domain: e.target.value }))}
+              placeholder="example.com"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              Optional. If set, issues one wildcard cert (e.g. *.example.com) covering every stack instead of a
+              cert per stack domain. Requires a Cloudflare API token above; leave blank to keep per-stack certs.
+            </p>
+          </div>
+        </>
       )}
 
       <div>

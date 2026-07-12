@@ -14,6 +14,11 @@ DEFAULT_CONFIG = """\
 # litethaus global configuration
 # Settings here control the dashboard and reverse proxy behavior.
 
+# Whether the single-user login gate is enforced. Set to false to disable
+# auth entirely - useful for local testing, but leaves every API endpoint
+# and websocket open with no authentication.
+auth_enabled: true
+
 # Directory containing one subfolder per stack, each with its own docker-compose.yaml
 stacks_dir: /opt/litethaus/stacks
 
@@ -28,6 +33,17 @@ https_mode: "off"
 
 # Email for ACME/Let's Encrypt certificate registration, required when https_mode is "acme"
 acme_email: ""
+
+# Cloudflare API token for DNS-01 ACME challenges (needs Zone:Read + DNS:Edit
+# permissions for the domain in use). Leave blank to use Caddy's default
+# HTTP-01/TLS-ALPN-01 challenges instead.
+cloudflare_api_token: ""
+
+# Wildcard domain for ACME certs, e.g. "example.com" issues one "*.example.com"
+# cert covering every stack instead of a cert per stack domain. Requires
+# cloudflare_api_token (DNS-01 is the only way to prove ownership of a
+# wildcard). Leave blank to keep today's per-stack-domain certs.
+wildcard_domain: ""
 
 # UI theme: "light", "dark", or "system"
 theme: system

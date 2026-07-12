@@ -42,9 +42,10 @@ PUBLIC_PATHS = {"/health", "/auth/status", "/auth/setup", "/auth/login"}
 @app.middleware("http")
 async def enforce_auth(request: Request, call_next):
     # Open by default until a password is actually set (first-run UX, like
-    # most self-hosted dashboards); once configured, everything except the
+    # most self-hosted dashboards) or while auth_enabled is set to false in
+    # config.yaml (local testing); once configured, everything except the
     # small public/auth surface requires a valid session cookie.
-    if request.url.path in PUBLIC_PATHS or not auth_service.is_configured():
+    if request.url.path in PUBLIC_PATHS or not auth_service.enabled() or not auth_service.is_configured():
         return await call_next(request)
     if not auth_service.is_valid_session(request.cookies.get(SESSION_COOKIE)):
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
@@ -64,6 +65,8 @@ def health() -> dict[str, str]:
 
 @app.get("/auth/status")
 def auth_status(request: Request) -> dict[str, bool]:
+    if not auth_service.enabled():
+        return {"configured": True, "authenticated": True}
     configured = auth_service.is_configured()
     authenticated = (not configured) or auth_service.is_valid_session(request.cookies.get(SESSION_COOKIE))
     return {"configured": configured, "authenticated": authenticated}
@@ -110,7 +113,7 @@ def get_config() -> dict[str, Any]:
     return data
 
 
-CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_url"}
+CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_url", "cloudflare_api_token", "wildcard_domain"}
 
 
 @app.patch("/config")
@@ -213,7 +216,7 @@ async def stack_logs(websocket: WebSocket, name: str, container: str | None = No
     # HTTP middleware doesn't run for websocket connections, so the session
     # cookie (sent automatically on the same-origin upgrade request) needs
     # its own check here.
-    if auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
+    if auth_service.enabled() and auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
         await websocket.close(code=4401)
         return
 
@@ -265,7 +268,7 @@ async def stack_logs(websocket: WebSocket, name: str, container: str | None = No
 
 @app.websocket("/stacks/{name}/terminal")
 async def stack_terminal(websocket: WebSocket, name: str, container: str) -> None:
-    if auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
+    if auth_service.enabled() and auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
         await websocket.close(code=4401)
         return
 

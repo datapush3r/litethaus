@@ -19,6 +19,9 @@ class AuthService:
     def is_configured(self) -> bool:
         return bool((self._config.load().get("auth") or {}).get("password_hash"))
 
+    def enabled(self) -> bool:
+        return bool(self._config.load().get("auth_enabled", True))
+
     @staticmethod
     def _hash_password(password: str) -> str:
         salt = secrets.token_bytes(16)

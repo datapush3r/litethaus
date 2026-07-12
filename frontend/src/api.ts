@@ -98,6 +98,8 @@ export interface Config {
   caddy_admin_url: string
   https_mode: string
   acme_email: string
+  cloudflare_api_token: string
+  wildcard_domain: string
   theme: string
   webhook_url: string
   [key: string]: unknown

@@ -67,6 +67,28 @@ def test_build_config_acme_https_uses_configured_email() -> None:
     assert policy["issuers"] == [{"module": "acme", "email": "me@example.com"}]
 
 
+def test_build_config_acme_https_with_cloudflare_token_adds_dns_challenge() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.example.com", "port": 80}, services=["web"])]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(
+        stacks, https_mode="acme", acme_email="me@example.com", cloudflare_api_token="tok123"
+    )
+    issuer = cfg["apps"]["tls"]["automation"]["policies"][0]["issuers"][0]
+    assert issuer["challenges"]["dns"]["provider"] == {"name": "cloudflare", "api_token": "tok123"}
+    assert issuer["challenges"]["dns"]["resolvers"] == ["1.1.1.1:53", "8.8.8.8:53"]
+
+
+def test_build_config_acme_https_with_wildcard_domain_uses_single_wildcard_subject() -> None:
+    stacks = [
+        Stack(name="app", path="x", x_litethaus={"domain": "app.example.com", "port": 80}, services=["web"]),
+        Stack(name="other", path="x", x_litethaus={"domain": "other.example.com", "port": 81}, services=["web"]),
+    ]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(
+        stacks, https_mode="acme", acme_email="me@example.com", wildcard_domain="example.com"
+    )
+    policy = cfg["apps"]["tls"]["automation"]["policies"][0]
+    assert policy["subjects"] == ["*.example.com"]
+
+
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
     test_build_config_prefers_explicit_service_over_first_service()
@@ -74,4 +96,6 @@ if __name__ == "__main__":
     test_build_config_defaults_to_http_only()
     test_build_config_internal_https_lists_domains_with_internal_issuer()
     test_build_config_acme_https_uses_configured_email()
+    test_build_config_acme_https_with_cloudflare_token_adds_dns_challenge()
+    test_build_config_acme_https_with_wildcard_domain_uses_single_wildcard_subject()
     print("ok")
