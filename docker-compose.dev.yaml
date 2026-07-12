@@ -29,6 +29,9 @@ services:
     command: caddy run --config /etc/caddyfile
     ports:
       - "80:80"
+      # host 443 is already bound by the real reverse proxy on this box;
+      # 8443 is dev-sandbox-only, production deployments should map 443:443
+      - "8443:443"
     expose:
       - "2019"
     networks:

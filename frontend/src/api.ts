@@ -74,6 +74,8 @@ export function logsSocketUrl(name: string): string {
 export interface Config {
   stacks_dir: string
   caddy_admin_url: string
+  https_mode: string
+  acme_email: string
   theme: string
   [key: string]: unknown
 }

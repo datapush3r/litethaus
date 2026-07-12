@@ -7,5 +7,14 @@ stacks_dir: /opt/litethaus/stacks
 # Base URL for the Caddy admin API used to push proxy config
 caddy_admin_url: http://caddy:2019
 
+# HTTPS mode for the reverse proxy: "off" (HTTP only), "internal" (self-signed
+# certs via Caddy's local CA - fine for .home.arpa/.local domains), or "acme"
+# (real certs via Let's Encrypt - requires stacks' domains to be publicly
+# resolvable and port 80/443 reachable from the internet)
+https_mode: off
+
+# Email for ACME/Let's Encrypt certificate registration, required when https_mode is "acme"
+acme_email: ''
+
 # UI theme: "light", "dark", or "system"
 theme: system

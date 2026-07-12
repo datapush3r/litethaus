@@ -4,16 +4,29 @@ import { fetchConfig, updateConfig, type Config } from '../api'
 import { setThemePreference } from '../theme'
 
 const THEME_OPTIONS = ['system', 'light', 'dark'] as const
+const HTTPS_MODE_OPTIONS = [
+  { value: 'off', label: 'Off (HTTP only)' },
+  { value: 'internal', label: 'Internal (self-signed, for .home.arpa/.local domains)' },
+  { value: 'acme', label: 'ACME (Let’s Encrypt, requires a public domain)' },
+] as const
 
 interface FormState {
   stacks_dir: string
   caddy_admin_url: string
+  https_mode: string
+  acme_email: string
   theme: string
 }
 
 export function SettingsPage() {
   const [config, setConfig] = useState<Config | null>(null)
-  const [form, setForm] = useState<FormState>({ stacks_dir: '', caddy_admin_url: '', theme: 'system' })
+  const [form, setForm] = useState<FormState>({
+    stacks_dir: '',
+    caddy_admin_url: '',
+    https_mode: 'off',
+    acme_email: '',
+    theme: 'system',
+  })
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -26,6 +39,8 @@ export function SettingsPage() {
         setForm({
           stacks_dir: String(cfg.stacks_dir ?? ''),
           caddy_admin_url: String(cfg.caddy_admin_url ?? ''),
+          https_mode: String(cfg.https_mode ?? 'off'),
+          acme_email: String(cfg.acme_email ?? ''),
           theme: String(cfg.theme ?? 'system'),
         })
       })
@@ -80,6 +95,35 @@ export function SettingsPage() {
           className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
       </div>
+
+      <div>
+        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">HTTPS</label>
+        <select
+          value={form.https_mode}
+          onChange={(e) => setForm((f) => ({ ...f, https_mode: e.target.value }))}
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+        >
+          {HTTPS_MODE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {form.https_mode === 'acme' && (
+        <div>
+          <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+            ACME email
+          </label>
+          <input
+            value={form.acme_email}
+            onChange={(e) => setForm((f) => ({ ...f, acme_email: e.target.value }))}
+            placeholder="you@example.com"
+            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          />
+        </div>
+      )}
 
       <div>
         <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">Theme</label>

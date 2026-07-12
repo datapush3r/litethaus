@@ -41,13 +41,17 @@ def get_config() -> dict[str, Any]:
     return dict(config_service.load())
 
 
+CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_url"}
+
+
 @app.patch("/config")
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
-    old_stacks_dir = config_service.load().get("stacks_dir")
+    old = config_service.load()
     updated = config_service.update(patch)
-    if updated.get("stacks_dir") != old_stacks_dir:
+    if updated.get("stacks_dir") != old.get("stacks_dir"):
         stack_service.scan()
         stack_service.restart_watcher()
+    if any(updated.get(k) != old.get(k) for k in CADDY_RELEVANT_KEYS):
         caddy_service.sync(stack_service.list_stacks())
     return dict(updated)
 
