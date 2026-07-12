@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Loader2, Menu, PackageOpen } from 'lucide-react'
 import {
+  authLogout,
   createStack,
+  fetchAuthStatus,
   fetchConfig,
   fetchStacks,
   fetchStatus,
   stackDown,
   stackUp,
+  type AuthStatus,
   type Stack,
   type StackState,
   type StackStatus,
 } from './api'
+import { AuthScreen } from './components/AuthScreen'
 import { StackCard } from './components/StackCard'
 import { StackDetail } from './components/StackDetail'
 import { StackEditor } from './components/StackEditor'
@@ -58,6 +62,42 @@ function useRoute(): [Route, (route: Route) => void] {
 }
 
 function App() {
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null)
+
+  const checkAuth = useCallback(() => {
+    fetchAuthStatus()
+      .then(setAuthStatus)
+      .catch(() => setAuthStatus({ configured: true, authenticated: false }))
+  }, [])
+
+  useEffect(() => {
+    checkAuth()
+  }, [checkAuth])
+
+  if (!authStatus) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-neutral-50 dark:bg-neutral-950">
+        <Loader2 size={20} className="animate-spin text-neutral-400" />
+      </div>
+    )
+  }
+
+  // "not configured yet" is intentionally reported as authenticated=true by
+  // the backend (so a fresh install is API-usable without a chicken-and-egg
+  // login), but the UI still needs to prompt for setup rather than skipping
+  // straight past onboarding into the dashboard.
+  if (!authStatus.configured) {
+    return <AuthScreen mode="setup" onAuthenticated={checkAuth} />
+  }
+
+  if (!authStatus.authenticated) {
+    return <AuthScreen mode="login" onAuthenticated={checkAuth} />
+  }
+
+  return <Dashboard onLogout={checkAuth} />
+}
+
+function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [stacks, setStacks] = useState<Stack[] | null>(null)
   const [statuses, setStatuses] = useState<Record<string, StackState>>({})
   const [health, setHealth] = useState<Record<string, StackStatus>>({})
@@ -171,6 +211,7 @@ function App() {
         onSelectStack={(name) => navigate(name ? { view: 'stack', name } : { view: 'stacks' })}
         onOpenSettings={() => navigate({ view: 'settings' })}
         onNewStack={() => navigate({ view: 'new' })}
+        onLogout={() => authLogout().then(onLogout)}
       />
 
       <div className="min-w-0 flex-1">

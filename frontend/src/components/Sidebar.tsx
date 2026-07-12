@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronRight, Folder, Plus, Settings as SettingsIcon } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, Folder, LogOut, Plus, Settings as SettingsIcon } from 'lucide-react'
 import type { Stack, StackState, StackStatus } from '../api'
 import type { Route } from '../routing'
 import { BAD_HEALTH, STATUS_DOT } from '../statusStyles'
@@ -14,6 +14,7 @@ interface SidebarProps {
   onSelectStack: (name: string | null) => void
   onOpenSettings: () => void
   onNewStack: () => void
+  onLogout: () => void
 }
 
 export function Sidebar({
@@ -26,6 +27,7 @@ export function Sidebar({
   onSelectStack,
   onOpenSettings,
   onNewStack,
+  onLogout,
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(true)
   const selected = route.view === 'stack' ? route.name : null
@@ -111,6 +113,13 @@ export function Sidebar({
         >
           <SettingsIcon size={14} className="text-neutral-400 dark:text-neutral-500" />
           Settings
+        </button>
+        <button
+          onClick={onLogout}
+          className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
+        >
+          <LogOut size={14} className="text-neutral-400 dark:text-neutral-500" />
+          Log out
         </button>
       </div>
     </nav>

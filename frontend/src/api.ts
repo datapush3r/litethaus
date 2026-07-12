@@ -107,3 +107,44 @@ export async function updateConfig(patch: Record<string, unknown>): Promise<Conf
   })
   return res.json()
 }
+
+export interface AuthStatus {
+  configured: boolean
+  authenticated: boolean
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  const res = await fetch('/api/auth/status')
+  return res.json()
+}
+
+export async function authSetup(username: string, password: string): Promise<void> {
+  const res = await fetch('/api/auth/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  await unwrap(res, 'failed to set up login')
+}
+
+export async function authLogin(username: string, password: string): Promise<void> {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  await unwrap(res, 'invalid username or password')
+}
+
+export async function authLogout(): Promise<void> {
+  await fetch('/api/auth/logout', { method: 'POST' })
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await fetch('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  })
+  await unwrap(res, 'failed to change password')
+}

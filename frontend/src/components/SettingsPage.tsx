@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { fetchConfig, updateConfig, type Config } from '../api'
+import { changePassword, fetchConfig, updateConfig, type Config } from '../api'
 import { setThemePreference } from '../theme'
 
 const THEME_OPTIONS = ['system', 'light', 'dark'] as const
@@ -34,6 +34,12 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordSaved, setPasswordSaved] = useState(false)
+
   useEffect(() => {
     fetchConfig()
       .then((cfg) => {
@@ -63,6 +69,22 @@ export function SettingsPage() {
       setSaveError('failed to save config')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleChangePassword() {
+    setPasswordSaving(true)
+    setPasswordSaved(false)
+    setPasswordError(null)
+    try {
+      await changePassword(currentPassword, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setPasswordSaved(true)
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'failed to change password')
+    } finally {
+      setPasswordSaving(false)
     }
   }
 
@@ -168,6 +190,37 @@ export function SettingsPage() {
         </button>
         {saved && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
         {saveError && <span className="text-xs text-red-600 dark:text-red-400">{saveError}</span>}
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
+        <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Change password</h2>
+
+        <input
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="Current password"
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+        />
+        <input
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="New password (at least 8 characters)"
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+        />
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleChangePassword}
+            disabled={passwordSaving || !currentPassword || !newPassword}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          >
+            {passwordSaving ? 'Saving…' : 'Change password'}
+          </button>
+          {passwordSaved && <span className="text-xs text-green-600 dark:text-green-400">Password changed</span>}
+          {passwordError && <span className="text-xs text-red-600 dark:text-red-400">{passwordError}</span>}
+        </div>
       </div>
     </div>
   )

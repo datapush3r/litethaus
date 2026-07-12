@@ -4,9 +4,11 @@ from contextlib import aclosing, asynccontextmanager, suppress
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from auth_service import SESSION_COOKIE, SESSION_TTL_SECONDS, auth_service
 from caddy_service import caddy_service
 from config_service import config_service
 from docker_service import docker_service
@@ -28,9 +30,30 @@ app = FastAPI(title="litethaus", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+PUBLIC_PATHS = {"/health", "/auth/status", "/auth/setup", "/auth/login"}
+
+
+@app.middleware("http")
+async def enforce_auth(request: Request, call_next):
+    # Open by default until a password is actually set (first-run UX, like
+    # most self-hosted dashboards); once configured, everything except the
+    # small public/auth surface requires a valid session cookie.
+    if request.url.path in PUBLIC_PATHS or not auth_service.is_configured():
+        return await call_next(request)
+    if not auth_service.is_valid_session(request.cookies.get(SESSION_COOKIE)):
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    return await call_next(request)
+
+
+def _set_session_cookie(response: Response) -> None:
+    response.set_cookie(
+        SESSION_COOKIE, auth_service.create_session(), httponly=True, samesite="lax", max_age=SESSION_TTL_SECONDS
+    )
 
 
 @app.get("/health")
@@ -38,9 +61,52 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/auth/status")
+def auth_status(request: Request) -> dict[str, bool]:
+    configured = auth_service.is_configured()
+    authenticated = (not configured) or auth_service.is_valid_session(request.cookies.get(SESSION_COOKIE))
+    return {"configured": configured, "authenticated": authenticated}
+
+
+@app.post("/auth/setup")
+def auth_setup(body: dict[str, Any], response: Response) -> dict[str, bool]:
+    try:
+        auth_service.setup(str(body.get("username", "")), str(body.get("password", "")))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    _set_session_cookie(response)
+    return {"ok": True}
+
+
+@app.post("/auth/login")
+def auth_login(body: dict[str, Any], response: Response) -> dict[str, bool]:
+    if not auth_service.verify_login(str(body.get("username", "")), str(body.get("password", ""))):
+        raise HTTPException(status_code=401, detail="invalid username or password")
+    _set_session_cookie(response)
+    return {"ok": True}
+
+
+@app.post("/auth/logout")
+def auth_logout(request: Request, response: Response) -> dict[str, bool]:
+    auth_service.revoke_session(request.cookies.get(SESSION_COOKIE))
+    response.delete_cookie(SESSION_COOKIE)
+    return {"ok": True}
+
+
+@app.post("/auth/change-password")
+def auth_change_password(body: dict[str, Any]) -> dict[str, bool]:
+    try:
+        auth_service.change_password(str(body.get("current_password", "")), str(body.get("new_password", "")))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True}
+
+
 @app.get("/config")
 def get_config() -> dict[str, Any]:
-    return dict(config_service.load())
+    data = dict(config_service.load())
+    data.pop("auth", None)
+    return data
 
 
 CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_url"}
@@ -48,6 +114,9 @@ CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_ur
 
 @app.patch("/config")
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
+    # auth credentials only ever change through the dedicated /auth endpoints,
+    # which hash the password before it touches config.yaml.
+    patch = {k: v for k, v in patch.items() if k != "auth"}
     old = config_service.load()
     updated = config_service.update(patch)
     if updated.get("stacks_dir") != old.get("stacks_dir"):
@@ -55,7 +124,9 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
         stack_service.restart_watcher()
     if any(updated.get(k) != old.get(k) for k in CADDY_RELEVANT_KEYS):
         caddy_service.sync(stack_service.list_stacks())
-    return dict(updated)
+    updated = dict(updated)
+    updated.pop("auth", None)
+    return updated
 
 
 @app.get("/stacks")
@@ -133,6 +204,13 @@ def stack_down(name: str) -> dict[str, Any]:
 
 @app.websocket("/stacks/{name}/logs")
 async def stack_logs(websocket: WebSocket, name: str) -> None:
+    # HTTP middleware doesn't run for websocket connections, so the session
+    # cookie (sent automatically on the same-origin upgrade request) needs
+    # its own check here.
+    if auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
+        await websocket.close(code=4401)
+        return
+
     stacks = {s.name: s for s in stack_service.list_stacks()}
     stack = stacks.get(name)
     if stack is None:
