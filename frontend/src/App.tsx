@@ -1,18 +1,36 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchStacks, fetchStatus, stackDown, stackUp, type Stack, type StackState } from './api'
 import { StackCard } from './components/StackCard'
-import { LogViewer } from './components/LogViewer'
+import { StackDetail } from './components/StackDetail'
 import { Sidebar } from './components/Sidebar'
+import { parseSelected, stackPath } from './routing'
 
 const STATUS_POLL_MS = 5000
+
+function useSelectedStack(): [string | null, (name: string | null) => void] {
+  const [path, setPath] = useState(() => window.location.pathname)
+
+  useEffect(() => {
+    const onPopState = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  const navigate = useCallback((name: string | null) => {
+    const next = stackPath(name)
+    window.history.pushState({}, '', next)
+    setPath(next)
+  }, [])
+
+  return [parseSelected(path), navigate]
+}
 
 function App() {
   const [stacks, setStacks] = useState<Stack[] | null>(null)
   const [statuses, setStatuses] = useState<Record<string, StackState>>({})
   const [busy, setBusy] = useState<Record<string, boolean>>({})
-  const [logsFor, setLogsFor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, navigate] = useSelectedStack()
 
   const refreshStatuses = useCallback(async (list: Stack[]) => {
     const entries = await Promise.all(
@@ -31,7 +49,6 @@ function App() {
         setStacks(list)
         setError(null)
         await refreshStatuses(list)
-        setSelected((prev) => (prev && !list.some((s) => s.name === prev) ? null : prev))
       } catch {
         if (!cancelled) setError('backend unreachable')
       }
@@ -45,6 +62,12 @@ function App() {
     }
   }, [refreshStatuses])
 
+  useEffect(() => {
+    if (stacks && selected && !stacks.some((s) => s.name === selected)) {
+      navigate(null)
+    }
+  }, [stacks, selected, navigate])
+
   async function handleToggle(stack: Stack) {
     setBusy((prev) => ({ ...prev, [stack.name]: true }))
     try {
@@ -57,11 +80,11 @@ function App() {
     }
   }
 
-  const visibleStacks = stacks?.filter((s) => selected === null || s.name === selected) ?? []
+  const selectedStack = stacks?.find((s) => s.name === selected) ?? null
 
   return (
     <div className="flex min-h-screen bg-neutral-950 text-neutral-100">
-      <Sidebar stacks={stacks ?? []} statuses={statuses} selected={selected} onSelect={setSelected} />
+      <Sidebar stacks={stacks ?? []} statuses={statuses} selected={selected} onSelect={navigate} />
 
       <div className="flex-1">
         <header className="border-b border-neutral-800 px-6 py-4">
@@ -77,24 +100,31 @@ function App() {
             <p className="text-sm text-neutral-500">No stacks found. Add one under stacks_dir.</p>
           )}
 
-          {stacks !== null && stacks.length > 0 && (
+          {stacks !== null && selectedStack && (
+            <StackDetail
+              stack={selectedStack}
+              status={statuses[selectedStack.name] ?? null}
+              busy={!!busy[selectedStack.name]}
+              onToggle={() => handleToggle(selectedStack)}
+            />
+          )}
+
+          {stacks !== null && stacks.length > 0 && !selected && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {visibleStacks.map((stack) => (
+              {stacks.map((stack) => (
                 <StackCard
                   key={stack.name}
                   stack={stack}
                   status={statuses[stack.name] ?? null}
                   busy={!!busy[stack.name]}
                   onToggle={() => handleToggle(stack)}
-                  onViewLogs={() => setLogsFor(stack.name)}
+                  onOpen={() => navigate(stack.name)}
                 />
               ))}
             </div>
           )}
         </main>
       </div>
-
-      {logsFor && <LogViewer stackName={logsFor} onClose={() => setLogsFor(null)} />}
     </div>
   )
 }

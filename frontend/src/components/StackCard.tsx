@@ -1,4 +1,4 @@
-import { AlertTriangle, Box, ExternalLink, ScrollText } from 'lucide-react'
+import { AlertTriangle, Box, ExternalLink } from 'lucide-react'
 import type { Stack, StackState } from '../api'
 import { STATUS_BADGE } from '../statusStyles'
 
@@ -7,14 +7,17 @@ interface StackCardProps {
   status: StackState | null
   busy: boolean
   onToggle: () => void
-  onViewLogs: () => void
+  onOpen: () => void
 }
 
-export function StackCard({ stack, status, busy, onToggle, onViewLogs }: StackCardProps) {
+export function StackCard({ stack, status, busy, onToggle, onOpen }: StackCardProps) {
   const domain = typeof stack.x_litethaus.domain === 'string' ? stack.x_litethaus.domain : null
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+    <div
+      onClick={onOpen}
+      className="flex cursor-pointer flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4 hover:border-neutral-700"
+    >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
           <Box size={18} className="text-neutral-500" />
@@ -37,6 +40,7 @@ export function StackCard({ stack, status, busy, onToggle, onViewLogs }: StackCa
           href={`http://${domain}`}
           target="_blank"
           rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200"
         >
           {domain}
@@ -46,20 +50,16 @@ export function StackCard({ stack, status, busy, onToggle, onViewLogs }: StackCa
         <span className="text-xs text-neutral-600">no domain configured</span>
       )}
 
-      <div className="mt-auto flex gap-2 pt-1">
+      <div className="mt-auto pt-1">
         <button
-          onClick={onToggle}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggle()
+          }}
           disabled={busy || !!stack.error}
-          className="flex-1 rounded border border-neutral-700 px-2 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
+          className="w-full rounded border border-neutral-700 px-2 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
         >
           {status === 'running' ? 'Stop' : 'Start'}
-        </button>
-        <button
-          onClick={onViewLogs}
-          className="flex items-center gap-1 rounded border border-neutral-700 px-2 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
-        >
-          <ScrollText size={14} />
-          Logs
         </button>
       </div>
     </div>
