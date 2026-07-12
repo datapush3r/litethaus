@@ -12,3 +12,13 @@ data/config.yaml
 # Agent-facing project instructions - kept local/private, not shipped
 # in the public repo.
 CLAUDE.md
+
+# Secrets - nothing like this exists in the repo today, but ignored
+# proactively so a future mistake doesn't get committed.
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+*credentials*
