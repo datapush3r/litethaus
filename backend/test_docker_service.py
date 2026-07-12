@@ -16,6 +16,19 @@ def test_compose_cmd_uses_project_name_and_compose_file() -> None:
         "up",
         "-d",
     ]
+    assert svc._compose_cmd(stack, "logs", "-f", "--no-color", "--tail", "100") == [
+        "docker",
+        "compose",
+        "-p",
+        "example",
+        "-f",
+        stack.path,
+        "logs",
+        "-f",
+        "--no-color",
+        "--tail",
+        "100",
+    ]
 
 
 if __name__ == "__main__":

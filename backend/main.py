@@ -1,9 +1,10 @@
+import asyncio
 import threading
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager, suppress
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from caddy_service import caddy_service
@@ -74,3 +75,38 @@ def stack_down(name: str) -> dict[str, Any]:
     ok, output = docker_service.compose_down(_get_stack(name))
     caddy_service.sync(stack_service.list_stacks())
     return {"ok": ok, "output": output}
+
+
+@app.websocket("/stacks/{name}/logs")
+async def stack_logs(websocket: WebSocket, name: str) -> None:
+    stacks = {s.name: s for s in stack_service.list_stacks()}
+    stack = stacks.get(name)
+    if stack is None:
+        await websocket.close(code=4004)
+        return
+
+    await websocket.accept()
+
+    async def forward_logs() -> None:
+        async with aclosing(docker_service.stream_logs(stack)) as lines:
+            async for line in lines:
+                await websocket.send_text(line)
+
+    async def watch_disconnect() -> None:
+        # A client that only receives (never sends) leaves us blocked on the
+        # next docker log line forever unless we watch for the disconnect
+        # frame concurrently instead of discovering it lazily on send.
+        with suppress(WebSocketDisconnect):
+            while True:
+                await websocket.receive()
+
+    forward_task = asyncio.create_task(forward_logs())
+    disconnect_task = asyncio.create_task(watch_disconnect())
+    done, pending = await asyncio.wait({forward_task, disconnect_task}, return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+    for task in done:
+        with suppress(WebSocketDisconnect):
+            task.result()

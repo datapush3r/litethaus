@@ -1,4 +1,6 @@
+import asyncio
 import subprocess
+from collections.abc import AsyncIterator
 
 import docker
 from docker.errors import NotFound
@@ -35,6 +37,22 @@ class DockerService:
     def compose_down(self, stack: Stack) -> tuple[bool, str]:
         result = subprocess.run(self._compose_cmd(stack, "down"), capture_output=True, text=True)
         return result.returncode == 0, result.stdout + result.stderr
+
+    async def stream_logs(self, stack: Stack) -> AsyncIterator[str]:
+        process = await asyncio.create_subprocess_exec(
+            *self._compose_cmd(stack, "logs", "-f", "--no-color", "--tail", "100"),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                yield line.decode(errors="replace").rstrip("\n")
+        finally:
+            if process.returncode is None:
+                process.terminate()
 
     def container_status(self, stack: Stack) -> str:
         containers = self.client.containers.list(
