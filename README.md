@@ -4,6 +4,8 @@ A stateless, database-free, all-in-one homelab dashboard, docker-compose manager
 
 litethaus scans a directory of docker-compose stacks, gives you a dashboard to start/stop them and watch their logs in real time, and automatically wires up [Caddy](https://caddyserver.com/) as a reverse proxy for whichever ones you expose — no labels in your compose files, no database, no separate proxy config to maintain by hand.
 
+![litethaus stack detail page, showing the compose editor, terminal, and logs](dashboard-stack.png)
+
 ## Features
 
 - **Stack discovery** — scans a directory for one subfolder per stack, each with its own `compose.yaml` (or `compose.yml` / `docker-compose.yaml` / `docker-compose.yml`)
