@@ -44,6 +44,16 @@ export async function stackDown(name: string): Promise<{ ok: boolean; output: st
   return res.json()
 }
 
+export async function stackRestart(name: string): Promise<{ ok: boolean; output: string }> {
+  const res = await fetch(`/api/stacks/${name}/restart`, { method: 'POST' })
+  return res.json()
+}
+
+export async function stackUpdate(name: string): Promise<{ ok: boolean; output: string }> {
+  const res = await fetch(`/api/stacks/${name}/update`, { method: 'POST' })
+  return res.json()
+}
+
 async function unwrap<T>(res: Response, fallback: string): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => null)

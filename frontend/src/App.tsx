@@ -8,7 +8,9 @@ import {
   fetchStacks,
   fetchStatus,
   stackDown,
+  stackRestart,
   stackUp,
+  stackUpdate,
   type AuthStatus,
   type Stack,
   type StackState,
@@ -171,17 +173,29 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     setSidebarOpen(false)
   }, [route])
 
-  async function handleToggle(stack: Stack) {
+  async function runAction(stack: Stack, action: (name: string) => Promise<unknown>) {
     setBusy((prev) => ({ ...prev, [stack.name]: true }))
     try {
-      const running = statuses[stack.name] === 'running'
-      await (running ? stackDown(stack.name) : stackUp(stack.name))
+      await action(stack.name)
       const info = await fetchStatus(stack.name)
       setStatuses((prev) => ({ ...prev, [stack.name]: info.status }))
       setHealth((prev) => ({ ...prev, [stack.name]: info }))
     } finally {
       setBusy((prev) => ({ ...prev, [stack.name]: false }))
     }
+  }
+
+  function handleToggle(stack: Stack) {
+    const running = statuses[stack.name] === 'running'
+    return runAction(stack, running ? stackDown : stackUp)
+  }
+
+  function handleRestart(stack: Stack) {
+    return runAction(stack, stackRestart)
+  }
+
+  function handleUpdate(stack: Stack) {
+    return runAction(stack, stackUpdate)
   }
 
   const selectedStack = route.view === 'stack' ? (stacks?.find((s) => s.name === route.name) ?? null) : null
@@ -272,6 +286,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               containers={health[selectedStack.name]?.containers ?? []}
               busy={!!busy[selectedStack.name]}
               onToggle={() => handleToggle(selectedStack)}
+              onRestart={() => handleRestart(selectedStack)}
+              onUpdate={() => handleUpdate(selectedStack)}
               onSaved={refreshStacks}
               onDeleted={() => {
                 navigate({ view: 'stacks' })

@@ -29,6 +29,8 @@ interface StackDetailProps {
   containers: ContainerInfo[]
   busy: boolean
   onToggle: () => void
+  onRestart: () => void
+  onUpdate: () => void
   onSaved: () => void
   onDeleted: () => void
 }
@@ -45,6 +47,8 @@ export function StackDetail({
   containers,
   busy,
   onToggle,
+  onRestart,
+  onUpdate,
   onSaved,
   onDeleted,
 }: StackDetailProps) {
@@ -221,6 +225,22 @@ export function StackDetail({
             className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
             {status === 'running' ? 'Stop' : 'Start'}
+          </button>
+          <button
+            onClick={onRestart}
+            disabled={busy || !!stack.error || status !== 'running'}
+            title={status !== 'running' ? 'start the stack before restarting it' : undefined}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          >
+            Restart
+          </button>
+          <button
+            onClick={onUpdate}
+            disabled={busy || !!stack.error}
+            title="Pull latest images and recreate containers"
+            className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          >
+            Update
           </button>
           <button
             onClick={handleDelete}

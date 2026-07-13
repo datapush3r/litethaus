@@ -224,6 +224,20 @@ def stack_down(name: str) -> dict[str, Any]:
     return {"ok": ok, "output": output}
 
 
+@app.post("/stacks/{name}/restart")
+def stack_restart(name: str) -> dict[str, Any]:
+    ok, output = docker_service.compose_restart(_get_stack(name))
+    caddy_service.sync(stack_service.list_stacks())
+    return {"ok": ok, "output": output}
+
+
+@app.post("/stacks/{name}/update")
+def stack_update(name: str) -> dict[str, Any]:
+    ok, output = docker_service.compose_update(_get_stack(name))
+    caddy_service.sync(stack_service.list_stacks())
+    return {"ok": ok, "output": output}
+
+
 @app.websocket("/stacks/{name}/logs")
 async def stack_logs(websocket: WebSocket, name: str, container: str | None = None) -> None:
     # HTTP middleware doesn't run for websocket connections, so the session

@@ -46,6 +46,18 @@ class DockerService:
         result = subprocess.run(self._compose_cmd(stack, "down"), capture_output=True, text=True)
         return result.returncode == 0, result.stdout + result.stderr
 
+    def compose_restart(self, stack: Stack) -> tuple[bool, str]:
+        result = subprocess.run(self._compose_cmd(stack, "restart"), capture_output=True, text=True)
+        return result.returncode == 0, result.stdout + result.stderr
+
+    def compose_update(self, stack: Stack) -> tuple[bool, str]:
+        pull = subprocess.run(self._compose_cmd(stack, "pull"), capture_output=True, text=True)
+        if pull.returncode != 0:
+            return False, pull.stdout + pull.stderr
+        self.ensure_network()
+        up = subprocess.run(self._compose_cmd(stack, "up", "-d"), capture_output=True, text=True)
+        return up.returncode == 0, pull.stdout + pull.stderr + up.stdout + up.stderr
+
     async def stream_logs(self, stack: Stack, container: str | None = None) -> AsyncIterator[str]:
         # A single container's logs are streamed directly via `docker logs`
         # rather than `docker compose logs <service>` - the caller already
