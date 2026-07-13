@@ -50,7 +50,7 @@ A pre-built image is published to GHCR on every push to `master`. Grab just `doc
 ```bash
 mkdir litethaus && cd litethaus
 curl -O https://raw.githubusercontent.com/datapush3r/litethaus/master/docker-compose.yaml
-mkdir data stacks
+mkdir config stacks
 docker compose pull && docker compose up -d
 ```
 

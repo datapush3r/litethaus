@@ -8,12 +8,12 @@ from stacks_service import Stack
 
 def _svc() -> DockerService:
     # A fresh, unbootstrapped config path so tests never touch the real
-    # /opt/litethaus/config.yaml or depend on project_prefix being unset there.
+    # /config/config.yaml or depend on project_prefix being unset there.
     return DockerService(config=ConfigService(Path(tempfile.mkdtemp()) / "config.yaml"))
 
 
 def test_compose_cmd_uses_project_name_and_compose_file() -> None:
-    stack = Stack(name="example", path="/opt/litethaus/stacks/example/docker-compose.yaml")
+    stack = Stack(name="example", path="/config/stacks/example/docker-compose.yaml")
     svc = _svc()
 
     assert svc._compose_cmd(stack, "up", "-d") == [
@@ -44,7 +44,7 @@ def test_compose_cmd_uses_project_name_and_compose_file() -> None:
 def test_compose_cmd_adds_override_file_when_present() -> None:
     stack = Stack(
         name="example",
-        path="/opt/litethaus/stacks/example/compose.yaml",
+        path="/config/stacks/example/compose.yaml",
         override_file="compose.override.yaml",
     )
     svc = _svc()
@@ -57,7 +57,7 @@ def test_compose_cmd_adds_override_file_when_present() -> None:
         "-f",
         stack.path,
         "-f",
-        "/opt/litethaus/stacks/example/compose.override.yaml",
+        "/config/stacks/example/compose.override.yaml",
         "up",
         "-d",
     ]

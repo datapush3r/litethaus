@@ -20,7 +20,7 @@ def test_round_trip_preserves_comments() -> None:
 
         reloaded = svc.load()
         assert reloaded["theme"] == "dark"
-        assert reloaded["stacks_dir"] == "/opt/litethaus/stacks"
+        assert reloaded["stacks_dir"] == "/config/stacks"
 
 
 if __name__ == "__main__":

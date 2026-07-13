@@ -6,7 +6,7 @@ services:
     container_name: litethaus
     restart: unless-stopped
     volumes:
-      - ./data:/opt/litethaus
+      - ./config:/config
       - /docker:/docker
       - /var/run/docker.sock:/var/run/docker.sock
     ports:

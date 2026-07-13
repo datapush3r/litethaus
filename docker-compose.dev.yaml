@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - ./backend:/app
-      - ./data:/opt/litethaus
+      - ./config:/config
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8080:8000"

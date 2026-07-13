@@ -5,7 +5,7 @@ docker-compose.override.local.yaml
 
 # Live instance data - host-specific config/stacks from running the dev
 # sandbox, not seed data.
-data/
+config/
 
 # Scratch todo list, not for the public repo.
 TODO

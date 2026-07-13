@@ -5,7 +5,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-CONFIG_PATH = Path(os.environ.get("LITETHAUS_CONFIG_PATH", "/opt/litethaus/config.yaml"))
+CONFIG_PATH = Path(os.environ.get("LITETHAUS_CONFIG_PATH", "/config/config.yaml"))
 
 _yaml = YAML()
 _yaml.preserve_quotes = True
@@ -20,7 +20,7 @@ DEFAULT_CONFIG = """\
 auth_enabled: true
 
 # Directory containing one subfolder per stack, each with its own docker-compose.yaml
-stacks_dir: /opt/litethaus/stacks
+stacks_dir: /config/stacks
 
 # Prepended to every Compose project name and to the shared "litethaus" Docker
 # network. Set this if another litethaus instance runs on the same host, so
