@@ -1,9 +1,21 @@
-import { useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronRight, Folder, LogOut, Plus, Settings as SettingsIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  LogOut,
+  Plus,
+  Settings as SettingsIcon,
+} from 'lucide-react'
 import type { Stack, StackState, StackStatus } from '../api'
 import type { Route } from '../routing'
 import { BAD_HEALTH, STATUS_DOT } from '../statusStyles'
 import { StackIcon } from './StackIcon'
+
+type SortMode = 'name' | 'state'
+const STATE_RANK: Record<StackState, number> = { running: 0, partial: 1, stopped: 2 }
 
 interface SidebarProps {
   stacks: Stack[]
@@ -31,7 +43,21 @@ export function Sidebar({
   onLogout,
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(true)
+  const [sortBy, setSortBy] = useState<SortMode>('name')
   const selected = route.view === 'stack' ? route.name : null
+
+  const sortedStacks = useMemo(() => {
+    const sorted = [...stacks]
+    sorted.sort((a, b) => {
+      if (sortBy === 'state') {
+        const rank = (s: Stack) => STATE_RANK[statuses[s.name] ?? 'stopped']
+        const diff = rank(a) - rank(b)
+        if (diff !== 0) return diff
+      }
+      return a.name.localeCompare(b.name)
+    })
+    return sorted
+  }, [stacks, statuses, sortBy])
 
   return (
     <nav
@@ -62,6 +88,14 @@ export function Sidebar({
         </button>
         <span className="pr-1 text-xs text-neutral-400 dark:text-neutral-600">{stacks.length}</span>
         <button
+          onClick={() => setSortBy((m) => (m === 'name' ? 'state' : 'name'))}
+          className="text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
+          aria-label={`Sort by ${sortBy === 'name' ? 'state' : 'name'} (currently sorted by ${sortBy})`}
+          title={`Sorted by ${sortBy}`}
+        >
+          <ArrowUpDown size={13} />
+        </button>
+        <button
           onClick={onNewStack}
           className={`text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 ${
             route.view === 'new' ? 'text-neutral-900 dark:text-neutral-100' : ''
@@ -72,9 +106,10 @@ export function Sidebar({
         </button>
       </div>
 
-      {expanded && (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {expanded && (
         <ul className="mt-0.5 ml-3 border-l border-neutral-200 pl-2 dark:border-neutral-800">
-          {stacks.map((stack) => (
+          {sortedStacks.map((stack) => (
             <li key={stack.name}>
               <button
                 onClick={() => onSelectStack(stack.name)}
@@ -102,9 +137,10 @@ export function Sidebar({
           )}
           {loading && <li className="px-2 py-1 text-xs text-neutral-400 dark:text-neutral-600">loading…</li>}
         </ul>
-      )}
+        )}
+      </div>
 
-      <div className="mt-auto border-t border-neutral-200 pt-2 dark:border-neutral-800">
+      <div className="mt-2 shrink-0 border-t border-neutral-200 pt-2 dark:border-neutral-800">
         <button
           onClick={onOpenSettings}
           className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
