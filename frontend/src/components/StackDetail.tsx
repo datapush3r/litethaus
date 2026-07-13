@@ -6,6 +6,7 @@ import {
   fetchStackRaw,
   logsSocketUrl,
   stackUrl,
+  updateStackMetadata,
   updateStackRaw,
   type ContainerInfo,
   type Stack,
@@ -13,6 +14,7 @@ import {
 } from '../api'
 import { HEALTH_BADGE, STATUS_BADGE } from '../statusStyles'
 import { formatYaml } from '../yamlFormat'
+import { IconPicker } from './IconPicker'
 import { LogPanel } from './LogPanel'
 import { StackIcon } from './StackIcon'
 import { TabBar } from './TabBar'
@@ -58,6 +60,17 @@ export function StackDetail({
   const [selectedTerminalContainer, setSelectedTerminalContainer] = useState<string | null>(null)
   const [selectedLogsContainer, setSelectedLogsContainer] = useState<string | null>(null)
   const [activeFile, setActiveFile] = useState<string | null>(null)
+  const [domainDraft, setDomainDraft] = useState('')
+  const [portDraft, setPortDraft] = useState('')
+  const [metaError, setMetaError] = useState<string | null>(null)
+  const [iconPickerOpen, setIconPickerOpen] = useState(false)
+
+  const meta = stack.x_litethaus
+  const domain = typeof meta.domain === 'string' ? meta.domain : null
+  const port = meta.port != null ? String(meta.port) : null
+  const icon = typeof meta.icon === 'string' ? meta.icon : ''
+  const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? null)
+  const extraFields = Object.entries(meta).filter(([key]) => !KNOWN_FIELDS.has(key))
 
   const primaryContainer = containers.find((c) => c.state === 'running')?.name ?? containers[0]?.name ?? null
   const activeTerminalContainer = containers.some((c) => c.name === selectedTerminalContainer)
@@ -87,6 +100,58 @@ export function StackDetail({
       setDraftContent(content)
     })
   }, [stack.name, effectiveFile])
+
+  useEffect(() => {
+    setDomainDraft(domain ?? '')
+    setPortDraft(port ?? '')
+    setMetaError(null)
+    setIconPickerOpen(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stack.name])
+
+  async function saveMetadata(patch: { icon?: string | null; port?: number | null; domain?: string | null }) {
+    setMetaError(null)
+    try {
+      await updateStackMetadata(stack.name, patch)
+      onSaved()
+      // keep the raw YAML editor in sync, but only if the user has no unsaved edits in it
+      if (draftContent === rawContent) {
+        const content = await fetchStackRaw(stack.name, effectiveFile ?? undefined)
+        setRawContent(content)
+        setDraftContent(content)
+      }
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : 'failed to save')
+    }
+  }
+
+  function handleDomainBlur() {
+    const next = domainDraft.trim()
+    if (next === (domain ?? '')) return
+    saveMetadata({ domain: next || null })
+  }
+
+  function handlePortBlur() {
+    const next = portDraft.trim()
+    if (next === (port ?? '')) return
+    if (next === '') {
+      saveMetadata({ port: null })
+      return
+    }
+    const parsed = Number(next)
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      setMetaError('port must be a whole number between 1 and 65535')
+      setPortDraft(port ?? '')
+      return
+    }
+    saveMetadata({ port: parsed })
+  }
+
+  function handleIconSelect(slug: string) {
+    setIconPickerOpen(false)
+    if (slug === icon) return
+    saveMetadata({ icon: slug || null })
+  }
 
   function handleFormat() {
     if (draftContent === null) return
@@ -130,19 +195,20 @@ export function StackDetail({
 
   const isDirty = draftContent !== null && draftContent !== rawContent
 
-  const meta = stack.x_litethaus
-  const domain = typeof meta.domain === 'string' ? meta.domain : null
-  const port = meta.port != null ? String(meta.port) : null
-  const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? null)
-  const extraFields = Object.entries(meta).filter(([key]) => !KNOWN_FIELDS.has(key))
-
   const hasContainers = containers.length > 0
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <StackIcon icon={meta.icon} size={22} />
+          <button
+            type="button"
+            onClick={() => setIconPickerOpen(true)}
+            title="Change icon"
+            className="rounded transition-opacity hover:opacity-70"
+          >
+            <StackIcon icon={meta.icon} size={22} />
+          </button>
           <h2 className="text-lg font-medium text-neutral-900 dark:text-neutral-100">{stack.name}</h2>
           {status && (
             <span className={`rounded-full border px-2 py-0.5 text-xs ${STATUS_BADGE[status]}`}>{status}</span>
@@ -185,25 +251,40 @@ export function StackDetail({
         <dl className={`grid grid-cols-2 gap-x-6 gap-y-3 text-sm ${hasContainers ? '' : 'lg:col-span-2 sm:grid-cols-3'}`}>
           <div>
             <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Domain</dt>
-            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
-              {domain ? (
+            <dd className="mt-0.5 flex items-center gap-1 text-neutral-700 dark:text-neutral-200">
+              <input
+                type="text"
+                value={domainDraft}
+                onChange={(e) => setDomainDraft(e.target.value)}
+                onBlur={handleDomainBlur}
+                placeholder="not set"
+                className="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 outline-none placeholder:text-neutral-400 hover:border-neutral-300 focus:border-neutral-400 dark:placeholder:text-neutral-600 dark:hover:border-neutral-700 dark:focus:border-neutral-600"
+              />
+              {domain && (
                 <a
                   href={stackUrl(domain, httpsPort)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1 hover:text-neutral-900 dark:hover:text-neutral-100"
+                  className="shrink-0 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
                 >
-                  {domain}
                   <ExternalLink size={12} />
                 </a>
-              ) : (
-                '—'
               )}
             </dd>
           </div>
           <div>
             <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Port</dt>
-            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{port ?? '—'}</dd>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={portDraft}
+                onChange={(e) => setPortDraft(e.target.value)}
+                onBlur={handlePortBlur}
+                placeholder="not set"
+                className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 outline-none placeholder:text-neutral-400 hover:border-neutral-300 focus:border-neutral-400 dark:placeholder:text-neutral-600 dark:hover:border-neutral-700 dark:focus:border-neutral-600"
+              />
+            </dd>
           </div>
           <div>
             <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Proxied service</dt>
@@ -258,6 +339,17 @@ export function StackDetail({
           </div>
         )}
       </div>
+
+      {metaError && (
+        <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+          <AlertTriangle size={16} />
+          {metaError}
+        </div>
+      )}
+
+      {iconPickerOpen && (
+        <IconPicker value={icon} onSelect={handleIconSelect} onClose={() => setIconPickerOpen(false)} />
+      )}
 
       <PanelGroup direction="horizontal" autoSaveId="litethaus-stackdetail-h" className="min-h-[24rem] flex-1">
         <Panel defaultSize={35} minSize={20}>

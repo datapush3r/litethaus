@@ -77,6 +77,18 @@ export async function updateStackRaw(name: string, content: string, file?: strin
   return unwrap<Stack>(res, 'failed to save stack')
 }
 
+export async function updateStackMetadata(
+  name: string,
+  patch: { icon?: string | null; port?: number | null; domain?: string | null; service?: string | null }
+): Promise<Stack> {
+  const res = await fetch(`/api/stacks/${name}/metadata`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  return unwrap<Stack>(res, 'failed to save stack metadata')
+}
+
 export async function deleteStack(name: string): Promise<void> {
   const res = await fetch(`/api/stacks/${name}`, { method: 'DELETE' })
   await unwrap(res, 'failed to delete stack')
@@ -96,6 +108,7 @@ export function terminalSocketUrl(name: string, container: string): string {
 export interface Config {
   stacks_dir: string
   caddy_enabled: boolean
+  auto_icon_enabled: boolean
   caddy_admin_url: string
   https_port: number
   https_mode: string

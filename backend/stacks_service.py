@@ -1,3 +1,4 @@
+import io
 import logging
 import re
 import shutil
@@ -10,6 +11,7 @@ from ruamel.yaml import YAML
 from watchfiles import watch
 
 from config_service import config_service
+from icon_service import icon_service
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,26 @@ def _override_candidates(primary_filename: str) -> tuple[str, ...]:
     # "docker-compose.yaml" base pairs with "docker-compose.override.*".
     family = "docker-compose" if primary_filename.startswith("docker-compose") else "compose"
     return (f"{family}.override.yaml", f"{family}.override.yml")
+
+
+def _image_basename(image: str) -> str:
+    # "linuxserver/plex:latest" -> "plex", "ghcr.io/foo/bar:tag" -> "bar",
+    # "nginx@sha256:abcdef" -> "nginx", "registry.local:5000/foo/bar:tag" -> "bar"
+    image = image.split("@", 1)[0]
+    last_segment = image.rsplit("/", 1)[-1]
+    return last_segment.split(":", 1)[0]
+
+
+def _icon_candidates(name: str, data: dict[str, Any]) -> list[str]:
+    services = data.get("services") or {}
+    candidates: list[str] = []
+    for svc in services.values():
+        image = (svc or {}).get("image")
+        if image:
+            candidates.append(_image_basename(str(image)))
+    candidates.append(name)
+    candidates.extend(services.keys())
+    return candidates
 
 
 @dataclass
@@ -74,9 +96,40 @@ class StackService:
             override_path = self._find_override_file(entry, compose_paths[0].name)
             stacks[entry.name] = self._parse(entry.name, compose_paths, override_path)
 
+        for stack in stacks.values():
+            self._backfill_icon(stack)
+
         with self._lock:
             self._stacks = stacks
         return list(stacks.values())
+
+    def _guess_icon(self, name: str, data: dict[str, Any]) -> str | None:
+        if not config_service.load().get("auto_icon_enabled", True):
+            return None
+        return icon_service.guess(_icon_candidates(name, data))
+
+    def _backfill_icon(self, stack: Stack) -> None:
+        if stack.error is not None or "icon" in stack.x_litethaus:
+            return
+        compose_path = Path(stack.path)
+        try:
+            with compose_path.open("r") as f:
+                data = _yaml.load(f) or {}
+        except Exception:
+            return  # leave it for the next scan to retry
+        guessed = self._guess_icon(stack.name, data)
+        if not guessed:
+            return
+        data.setdefault("x-litethaus", {})["icon"] = guessed
+        tmp = compose_path.with_suffix(compose_path.suffix + ".tmp")
+        try:
+            with tmp.open("w") as f:
+                _yaml.dump(data, f)
+            tmp.replace(compose_path)
+        except Exception:
+            logger.exception("Failed to backfill icon for %s", stack.name)
+            return
+        stack.x_litethaus = dict(data.get("x-litethaus") or {})
 
     def _find_compose_files(self, entry: Path) -> list[Path]:
         return [entry / filename for filename in COMPOSE_FILENAMES if (entry / filename).exists()]
@@ -143,13 +196,43 @@ class StackService:
             raise KeyError(filename)
         return Path(stack.path).parent / filename
 
+    def update_metadata(self, name: str, patch: dict[str, Any]) -> Stack:
+        path = Path(self._require(name).path)
+        with path.open("r") as f:
+            data = _yaml.load(f) or {}
+        x_litethaus = data.get("x-litethaus")
+        if x_litethaus is None:
+            x_litethaus = {}
+            data["x-litethaus"] = x_litethaus
+        for key, value in patch.items():
+            if value is None:
+                x_litethaus.pop(key, None)
+            else:
+                x_litethaus[key] = value
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with tmp.open("w") as f:
+            _yaml.dump(data, f)
+        tmp.replace(path)
+        self.scan()
+        return self._require(name)
+
     def create_stack(self, name: str, content: str) -> Stack:
         if not STACK_NAME_RE.match(name):
             raise ValueError("stack name must be alphanumeric (dashes/underscores allowed)")
         stack_dir = self.stacks_dir / name
         if stack_dir.exists():
             raise ValueError(f"stack {name!r} already exists")
-        self._validate_yaml(content)
+        data = _yaml.load(content) or {}  # raises on invalid YAML - same effect as _validate_yaml
+        x_litethaus = data.get("x-litethaus") or {}
+        if "icon" not in x_litethaus:
+            guessed = self._guess_icon(name, data)
+            if guessed:
+                # only touch content when we actually inject something, so a
+                # miss or an already-set icon leaves the submitted text as-is
+                data.setdefault("x-litethaus", {})["icon"] = guessed
+                buf = io.StringIO()
+                _yaml.dump(data, buf)
+                content = buf.getvalue()
         stack_dir.mkdir(parents=True)
         (stack_dir / DEFAULT_COMPOSE_FILENAME).write_text(content)
         self.scan()

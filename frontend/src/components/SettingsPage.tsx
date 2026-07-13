@@ -13,6 +13,7 @@ const HTTPS_MODE_OPTIONS = [
 interface FormState {
   stacks_dir: string
   caddy_enabled: boolean
+  auto_icon_enabled: boolean
   caddy_admin_url: string
   https_port: number
   https_mode: string
@@ -28,6 +29,7 @@ export function SettingsPage() {
   const [form, setForm] = useState<FormState>({
     stacks_dir: '',
     caddy_enabled: true,
+    auto_icon_enabled: true,
     caddy_admin_url: '',
     https_port: 443,
     https_mode: 'off',
@@ -55,6 +57,7 @@ export function SettingsPage() {
         setForm({
           stacks_dir: String(cfg.stacks_dir ?? ''),
           caddy_enabled: Boolean(cfg.caddy_enabled ?? true),
+          auto_icon_enabled: Boolean(cfg.auto_icon_enabled ?? true),
           caddy_admin_url: String(cfg.caddy_admin_url ?? ''),
           https_port: Number(cfg.https_port ?? 443),
           https_mode: String(cfg.https_mode ?? 'off'),
@@ -135,6 +138,23 @@ export function SettingsPage() {
           <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
             Turn off if you front your own stacks with a different reverse proxy - litethaus
             will stop pushing config to Caddy, and each stack's domain/port fields are ignored.
+          </p>
+        </label>
+      </div>
+
+      <div className="flex items-start gap-2">
+        <input
+          id="auto_icon_enabled"
+          type="checkbox"
+          checked={form.auto_icon_enabled}
+          onChange={(e) => setForm((f) => ({ ...f, auto_icon_enabled: e.target.checked }))}
+          className="mt-0.5"
+        />
+        <label htmlFor="auto_icon_enabled" className="text-sm text-neutral-700 dark:text-neutral-300">
+          Automatically guess stack icons
+          <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+            When a stack has no icon set, litethaus tries to match one from the dashboard-icons
+            catalog based on its image and stack name. Turn off to leave icon-less stacks alone.
           </p>
         </label>
       </div>

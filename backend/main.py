@@ -177,6 +177,19 @@ def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
     return asdict(stack)
 
 
+@app.patch("/stacks/{name}/metadata")
+def update_stack_metadata(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    _get_stack(name)
+    allowed = {"icon", "port", "domain", "service"}
+    patch = {k: v for k, v in body.items() if k in allowed}
+    try:
+        stack = stack_service.update_metadata(name, patch)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    caddy_service.sync(stack_service.list_stacks())
+    return asdict(stack)
+
+
 @app.delete("/stacks/{name}")
 def remove_stack(name: str) -> dict[str, bool]:
     stack = _get_stack(name)

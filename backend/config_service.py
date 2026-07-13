@@ -28,6 +28,11 @@ stacks_dir: /opt/litethaus/stacks
 # are simply ignored).
 caddy_enabled: true
 
+# Whether litethaus guesses an icon for stacks that don't have one set, by
+# matching image/stack/service names against the dashboard-icons catalog.
+# Set to false to leave icon-less stacks alone entirely.
+auto_icon_enabled: true
+
 # Base URL for the Caddy admin API used to push proxy config
 caddy_admin_url: http://localhost:2019
 

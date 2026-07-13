@@ -1,12 +1,19 @@
 import tempfile
 import threading
 from pathlib import Path
+from unittest.mock import patch
 
-from stacks_service import StackService
+from stacks_service import StackService, _icon_candidates, _image_basename
+
+# None of these tests exercise icon-guessing itself, so auto-icon is patched
+# off throughout to keep them offline and deterministic (real guessing would
+# otherwise hit the network on every scan()/create_stack() call and could
+# silently inject an icon into asserted-exact file contents).
+NO_ICON = patch("stacks_service.icon_service.guess", return_value=None)
 
 
 def test_scan_parses_metadata_and_isolates_errors() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
         stacks_dir = Path(tmp)
 
         good = stacks_dir / "example"
@@ -34,7 +41,7 @@ def test_scan_parses_metadata_and_isolates_errors() -> None:
 
 
 def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
         stacks_dir = Path(tmp)
 
         names = {
@@ -68,7 +75,7 @@ def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -
 
 
 def test_override_file_is_detected_and_ordered_right_after_the_primary_file() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
         stacks_dir = Path(tmp)
 
         with_override = stacks_dir / "with-override"
@@ -105,7 +112,7 @@ def test_override_file_is_detected_and_ordered_right_after_the_primary_file() ->
 
 
 def test_multiple_compose_files_are_each_independently_readable_and_writable() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
         stacks_dir = Path(tmp)
         stack_dir = stacks_dir / "multi"
         stack_dir.mkdir()
@@ -133,7 +140,7 @@ def test_multiple_compose_files_are_each_independently_readable_and_writable() -
 
 
 def test_create_write_and_delete_stack_round_trip() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
         svc = StackService(stacks_dir=Path(tmp))
 
         created = svc.create_stack("web", "services:\n  app:\n    image: nginx:alpine\n")
@@ -168,6 +175,108 @@ def test_create_write_and_delete_stack_round_trip() -> None:
         assert "web" not in {s.name for s in svc.list_stacks()}
 
 
+def test_update_metadata_patches_x_litethaus_and_preserves_comments() -> None:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
+        stacks_dir = Path(tmp)
+        stack_dir = stacks_dir / "web"
+        stack_dir.mkdir()
+        (stack_dir / "compose.yaml").write_text(
+            "# a comment worth keeping\n"
+            "x-litethaus:\n  domain: old.home.arpa\n  port: 8080\n"
+            "services:\n  app:\n    image: nginx:alpine\n"
+        )
+
+        svc = StackService(stacks_dir=stacks_dir)
+        svc.scan()
+
+        updated = svc.update_metadata("web", {"domain": "new.home.arpa", "icon": "nginx", "service": None})
+        assert updated.x_litethaus == {"domain": "new.home.arpa", "port": 8080, "icon": "nginx"}
+        assert svc.read_raw("web").startswith("# a comment worth keeping\n")
+
+
+def test_image_basename_strips_registry_tag_and_digest() -> None:
+    assert _image_basename("linuxserver/plex:latest") == "plex"
+    assert _image_basename("ghcr.io/foo/bar:tag") == "bar"
+    assert _image_basename("nginx@sha256:abcdef") == "nginx"
+    assert _image_basename("myregistry.local:5000/foo/bar:tag") == "bar"
+    assert _image_basename("redis") == "redis"
+
+
+def test_icon_candidates_orders_image_basenames_before_name_before_services() -> None:
+    data = {
+        "services": {
+            "web": {"image": "linuxserver/plex:latest"},
+            "worker": {"image": "redis:alpine"},
+        }
+    }
+    assert _icon_candidates("my-stack", data) == ["plex", "redis", "my-stack", "web", "worker"]
+
+
+def test_create_stack_injects_guessed_icon_when_none_provided() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = StackService(stacks_dir=Path(tmp))
+        with patch("stacks_service.icon_service.guess", return_value="plex"):
+            created = svc.create_stack("media", "services:\n  app:\n    image: linuxserver/plex:latest\n")
+
+        assert created.x_litethaus == {"icon": "plex"}
+        assert "icon: plex" in svc.read_raw("media")
+
+
+def test_create_stack_leaves_content_untouched_when_icon_already_present() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = StackService(stacks_dir=Path(tmp))
+        original = "x-litethaus:\n  icon: custom\nservices:\n  app:\n    image: nginx:alpine\n"
+        with patch("stacks_service.icon_service.guess", return_value="something-else") as guess:
+            created = svc.create_stack("web", original)
+
+        guess.assert_not_called()
+        assert created.x_litethaus == {"icon": "custom"}
+        assert svc.read_raw("web") == original
+
+
+def test_create_stack_leaves_content_untouched_when_no_guess_found() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = StackService(stacks_dir=Path(tmp))
+        original = "services:\n  app:\n    image: nginx:alpine\n"
+        with patch("stacks_service.icon_service.guess", return_value=None):
+            created = svc.create_stack("web", original)
+
+        assert created.x_litethaus == {}
+        assert svc.read_raw("web") == original
+
+
+def test_scan_backfills_icon_for_existing_iconless_stack() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        stacks_dir = Path(tmp)
+        stack_dir = stacks_dir / "media"
+        stack_dir.mkdir()
+        (stack_dir / "compose.yaml").write_text("services:\n  app:\n    image: linuxserver/plex:latest\n")
+
+        svc = StackService(stacks_dir=stacks_dir)
+        with patch("stacks_service.icon_service.guess", return_value="plex"):
+            stacks = {s.name: s for s in svc.scan()}
+
+        assert stacks["media"].x_litethaus == {"icon": "plex"}
+        assert "icon: plex" in (stack_dir / "compose.yaml").read_text()
+
+
+def test_scan_does_not_overwrite_explicit_empty_icon() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        stacks_dir = Path(tmp)
+        stack_dir = stacks_dir / "media"
+        stack_dir.mkdir()
+        original = 'x-litethaus:\n  icon: ""\nservices:\n  app:\n    image: linuxserver/plex:latest\n'
+        (stack_dir / "compose.yaml").write_text(original)
+
+        svc = StackService(stacks_dir=stacks_dir)
+        with patch("stacks_service.icon_service.guess", return_value="plex") as guess:
+            stacks = {s.name: s for s in svc.scan()}
+
+        guess.assert_not_called()
+        assert stacks["media"].x_litethaus == {"icon": ""}
+        assert (stack_dir / "compose.yaml").read_text() == original
+
+
 def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
     svc = StackService(stacks_dir=Path("/tmp"))
 
@@ -187,5 +296,13 @@ if __name__ == "__main__":
     test_override_file_is_detected_and_ordered_right_after_the_primary_file()
     test_multiple_compose_files_are_each_independently_readable_and_writable()
     test_create_write_and_delete_stack_round_trip()
+    test_update_metadata_patches_x_litethaus_and_preserves_comments()
+    test_image_basename_strips_registry_tag_and_digest()
+    test_icon_candidates_orders_image_basenames_before_name_before_services()
+    test_create_stack_injects_guessed_icon_when_none_provided()
+    test_create_stack_leaves_content_untouched_when_icon_already_present()
+    test_create_stack_leaves_content_untouched_when_no_guess_found()
+    test_scan_backfills_icon_for_existing_iconless_stack()
+    test_scan_does_not_overwrite_explicit_empty_icon()
     test_restart_watcher_signals_the_current_stop_event_when_armed()
     print("ok")
