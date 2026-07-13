@@ -1,0 +1,11 @@
+services:
+  backend:
+    image: ghcr.io/datapush3r/litethaus:latest
+    container_name: litethaus
+    restart: unless-stopped
+    volumes:
+      - ./data:/opt/litethaus
+      - ./stacks:/docker    # point at wherever your stacks live
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"

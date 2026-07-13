@@ -43,6 +43,19 @@ docker compose -f docker-compose.dev.yaml --profile caddy up --build
 
 Then open `http://localhost:5173`. On first run you'll be asked to set up an admin username and password. Once you're in, go to **Settings** and point `Stacks directory` at wherever your own compose stacks live (a bind mount, in the containerized setup above).
 
+### Run it without building
+
+A pre-built image is published to GHCR on every push to `master`. Grab just `docker-compose.yaml` from the repo root:
+
+```bash
+mkdir litethaus && cd litethaus
+curl -O https://raw.githubusercontent.com/datapush3r/litethaus/master/docker-compose.yaml
+mkdir data stacks
+docker compose pull && docker compose up -d
+```
+
+Then open `http://localhost:8000`.
+
 ## Configuration
 
 Global settings live in `config.yaml`, generated automatically with defaults on first run (also editable from the Settings page). It holds instance-specific state including the admin password hash, so it's gitignored rather than tracked — there's nothing to seed or copy manually:
