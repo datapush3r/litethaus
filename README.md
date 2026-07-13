@@ -12,7 +12,7 @@ litethaus scans a directory of docker-compose stacks, gives you a dashboard to s
 - **Start/stop/logs** — control stacks and stream their logs live from the browser
 - **Stack authoring** — create, edit, and delete stacks from the UI via a raw compose YAML editor, edited inline on the stack page; a stack with multiple containers or multiple compose files gets tabs for each
 - **In-browser terminal** — a real shell into any of a stack's running containers, next to its compose editor and live logs
-- **Automatic reverse proxy** — add an `x-litethaus:` block to a stack's compose file with a domain and port, and litethaus wires it into Caddy automatically
+- **Automatic reverse proxy** — set a domain and port on a stack (via its `.litethaus.yaml` sidecar file), and litethaus wires it into Caddy automatically
 - **Automatic HTTPS** — self-signed certs via Caddy's local CA (for `.home.arpa`/`.local` domains) or real ACME/Let's Encrypt certs for publicly resolvable domains
 - **Health monitoring** — per-container health and restart-loop status in the dashboard, with an optional webhook alert
 - **Single-user login** — a simple password gate for the dashboard itself
@@ -21,7 +21,7 @@ litethaus scans a directory of docker-compose stacks, gives you a dashboard to s
 ## How it works
 
 - The host file system is the source of truth — there's no database. Litethaus just reads and writes the compose files already in your stacks directory.
-- Per-stack metadata (domain, port, icon) lives in each stack's own compose file, in a root-level `x-litethaus:` extension field — invisible to `docker compose` itself, but read by litethaus.
+- Per-stack metadata (domain, port, icon) lives in a `.litethaus.yaml` sidecar file next to each stack's compose file — invisible to `docker compose` itself, but read by litethaus, keeping the compose file itself plain and portable.
 - Global settings (which directory to scan, HTTPS mode, theme, etc.) live in a single `config.yaml`, edited either directly or through the Settings page.
 - The reverse proxy is a bundled Caddy instance, configured entirely through Caddy's native admin API — litethaus never touches your services' compose files to add proxy labels. It's optional: turn `caddy_enabled` off in Settings if you front stacks with your own reverse proxy instead.
 
@@ -60,15 +60,16 @@ Global settings live in `config.yaml`, generated automatically with defaults on 
 | `theme` | `light`, `dark`, or `system` |
 | `webhook_url` | Optional webhook POSTed to when a stack becomes unhealthy or restart-loops |
 
-Per-stack settings live in each stack's compose file under `x-litethaus:`:
+Per-stack settings live in a `.litethaus.yaml` file inside each stack's own directory, alongside its compose file:
 
 ```yaml
-x-litethaus:
-  domain: myapp.home.arpa
-  port: 8080
-  service: web    # optional: which service to proxy to, if there's more than one
-  icon: nginx     # optional: slug from https://github.com/homarr-labs/dashboard-icons
+domain: myapp.home.arpa
+port: 8080
+service: web    # optional: which service to proxy to, if there's more than one
+icon: nginx     # optional: slug from https://github.com/homarr-labs/dashboard-icons
 ```
+
+(Stacks created before this file existed had their metadata under an `x-litethaus:` block embedded in the compose file itself — litethaus migrates it into `.litethaus.yaml` automatically the first time it scans the stack.)
 
 A stack directory can also hold an override file — `compose.override.yaml`/`.yml` next to `compose.yaml`/`.yml`, or `docker-compose.override.yaml`/`.yml` next to `docker-compose.yaml`/`.yml` — which litethaus auto-merges in via a second `-f` whenever the stack starts, same as `docker compose` does by default. Any other compose-named file in the directory (e.g. a leftover from switching naming conventions) is just exposed as an extra editor tab and otherwise ignored.
 

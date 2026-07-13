@@ -18,10 +18,8 @@ def test_scan_parses_metadata_and_isolates_errors() -> None:
 
         good = stacks_dir / "example"
         good.mkdir()
-        (good / "docker-compose.yaml").write_text(
-            "x-litethaus:\n  domain: example.home.arpa\n  port: 8080\n"
-            "services:\n  web:\n    image: nginx:alpine\n"
-        )
+        (good / "docker-compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
+        (good / ".litethaus.yaml").write_text("domain: example.home.arpa\nport: 8080\n")
 
         broken = stacks_dir / "broken"
         broken.mkdir()
@@ -180,10 +178,9 @@ def test_update_metadata_patches_x_litethaus_and_preserves_comments() -> None:
         stacks_dir = Path(tmp)
         stack_dir = stacks_dir / "web"
         stack_dir.mkdir()
-        (stack_dir / "compose.yaml").write_text(
-            "# a comment worth keeping\n"
-            "x-litethaus:\n  domain: old.home.arpa\n  port: 8080\n"
-            "services:\n  app:\n    image: nginx:alpine\n"
+        (stack_dir / "compose.yaml").write_text("services:\n  app:\n    image: nginx:alpine\n")
+        (stack_dir / ".litethaus.yaml").write_text(
+            "# a comment worth keeping\ndomain: old.home.arpa\nport: 8080\n"
         )
 
         svc = StackService(stacks_dir=stacks_dir)
@@ -191,7 +188,9 @@ def test_update_metadata_patches_x_litethaus_and_preserves_comments() -> None:
 
         updated = svc.update_metadata("web", {"domain": "new.home.arpa", "icon": "nginx", "service": None})
         assert updated.x_litethaus == {"domain": "new.home.arpa", "port": 8080, "icon": "nginx"}
-        assert svc.read_raw("web").startswith("# a comment worth keeping\n")
+        assert (stack_dir / ".litethaus.yaml").read_text().startswith("# a comment worth keeping\n")
+        # metadata never touches the compose file itself
+        assert svc.read_raw("web") == "services:\n  app:\n    image: nginx:alpine\n"
 
 
 def test_image_basename_strips_registry_tag_and_digest() -> None:
@@ -215,23 +214,30 @@ def test_icon_candidates_orders_image_basenames_before_name_before_services() ->
 def test_create_stack_injects_guessed_icon_when_none_provided() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         svc = StackService(stacks_dir=Path(tmp))
+        original = "services:\n  app:\n    image: linuxserver/plex:latest\n"
         with patch("stacks_service.icon_service.guess", return_value="plex"):
-            created = svc.create_stack("media", "services:\n  app:\n    image: linuxserver/plex:latest\n")
+            created = svc.create_stack("media", original)
 
         assert created.x_litethaus == {"icon": "plex"}
-        assert "icon: plex" in svc.read_raw("media")
+        # the guessed icon lands in the sidecar file, never in the compose file
+        assert svc.read_raw("media") == original
+        assert "icon: plex" in (Path(tmp) / "media" / ".litethaus.yaml").read_text()
 
 
-def test_create_stack_leaves_content_untouched_when_icon_already_present() -> None:
+def test_create_stack_migrates_embedded_x_litethaus_and_skips_guess_when_icon_present() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         svc = StackService(stacks_dir=Path(tmp))
-        original = "x-litethaus:\n  icon: custom\nservices:\n  app:\n    image: nginx:alpine\n"
+        submitted = "x-litethaus:\n  icon: custom\nservices:\n  app:\n    image: nginx:alpine\n"
         with patch("stacks_service.icon_service.guess", return_value="something-else") as guess:
-            created = svc.create_stack("web", original)
+            created = svc.create_stack("web", submitted)
 
         guess.assert_not_called()
         assert created.x_litethaus == {"icon": "custom"}
-        assert svc.read_raw("web") == original
+        # scan()'s migration path strips the embedded block from the compose
+        # file and moves it into the sidecar, same as any pre-existing stack
+        assert "x-litethaus" not in svc.read_raw("web")
+        assert svc.read_raw("web") == "services:\n  app:\n    image: nginx:alpine\n"
+        assert "icon: custom" in (Path(tmp) / "web" / ".litethaus.yaml").read_text()
 
 
 def test_create_stack_leaves_content_untouched_when_no_guess_found() -> None:
@@ -243,6 +249,7 @@ def test_create_stack_leaves_content_untouched_when_no_guess_found() -> None:
 
         assert created.x_litethaus == {}
         assert svc.read_raw("web") == original
+        assert not (Path(tmp) / "web" / ".litethaus.yaml").exists()
 
 
 def test_scan_backfills_icon_for_existing_iconless_stack() -> None:
@@ -250,14 +257,16 @@ def test_scan_backfills_icon_for_existing_iconless_stack() -> None:
         stacks_dir = Path(tmp)
         stack_dir = stacks_dir / "media"
         stack_dir.mkdir()
-        (stack_dir / "compose.yaml").write_text("services:\n  app:\n    image: linuxserver/plex:latest\n")
+        original = "services:\n  app:\n    image: linuxserver/plex:latest\n"
+        (stack_dir / "compose.yaml").write_text(original)
 
         svc = StackService(stacks_dir=stacks_dir)
         with patch("stacks_service.icon_service.guess", return_value="plex"):
             stacks = {s.name: s for s in svc.scan()}
 
         assert stacks["media"].x_litethaus == {"icon": "plex"}
-        assert "icon: plex" in (stack_dir / "compose.yaml").read_text()
+        assert "icon: plex" in (stack_dir / ".litethaus.yaml").read_text()
+        assert (stack_dir / "compose.yaml").read_text() == original
 
 
 def test_scan_does_not_overwrite_explicit_empty_icon() -> None:
@@ -265,8 +274,9 @@ def test_scan_does_not_overwrite_explicit_empty_icon() -> None:
         stacks_dir = Path(tmp)
         stack_dir = stacks_dir / "media"
         stack_dir.mkdir()
-        original = 'x-litethaus:\n  icon: ""\nservices:\n  app:\n    image: linuxserver/plex:latest\n'
-        (stack_dir / "compose.yaml").write_text(original)
+        (stack_dir / "compose.yaml").write_text("services:\n  app:\n    image: linuxserver/plex:latest\n")
+        original_meta = 'icon: ""\n'
+        (stack_dir / ".litethaus.yaml").write_text(original_meta)
 
         svc = StackService(stacks_dir=stacks_dir)
         with patch("stacks_service.icon_service.guess", return_value="plex") as guess:
@@ -274,7 +284,28 @@ def test_scan_does_not_overwrite_explicit_empty_icon() -> None:
 
         guess.assert_not_called()
         assert stacks["media"].x_litethaus == {"icon": ""}
-        assert (stack_dir / "compose.yaml").read_text() == original
+        assert (stack_dir / ".litethaus.yaml").read_text() == original_meta
+
+
+def test_scan_migrates_embedded_x_litethaus_to_sidecar_and_preserves_compose_comments() -> None:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
+        stacks_dir = Path(tmp)
+        stack_dir = stacks_dir / "legacy"
+        stack_dir.mkdir()
+        (stack_dir / "compose.yaml").write_text(
+            "# a comment worth keeping\n"
+            "x-litethaus:\n  domain: legacy.home.arpa\n  port: 8080\n"
+            "services:\n  app:\n    image: nginx:alpine\n"
+        )
+
+        svc = StackService(stacks_dir=stacks_dir)
+        stacks = {s.name: s for s in svc.scan()}
+
+        assert stacks["legacy"].x_litethaus == {"domain": "legacy.home.arpa", "port": 8080}
+        assert (stack_dir / ".litethaus.yaml").read_text() == "domain: legacy.home.arpa\nport: 8080\n"
+        compose_text = (stack_dir / "compose.yaml").read_text()
+        assert "x-litethaus" not in compose_text
+        assert compose_text.startswith("# a comment worth keeping\n")
 
 
 def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
@@ -300,9 +331,10 @@ if __name__ == "__main__":
     test_image_basename_strips_registry_tag_and_digest()
     test_icon_candidates_orders_image_basenames_before_name_before_services()
     test_create_stack_injects_guessed_icon_when_none_provided()
-    test_create_stack_leaves_content_untouched_when_icon_already_present()
+    test_create_stack_migrates_embedded_x_litethaus_and_skips_guess_when_icon_present()
     test_create_stack_leaves_content_untouched_when_no_guess_found()
     test_scan_backfills_icon_for_existing_iconless_stack()
     test_scan_does_not_overwrite_explicit_empty_icon()
+    test_scan_migrates_embedded_x_litethaus_to_sidecar_and_preserves_compose_comments()
     test_restart_watcher_signals_the_current_stop_event_when_armed()
     print("ok")

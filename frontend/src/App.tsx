@@ -27,11 +27,7 @@ import { setThemePreference } from './theme'
 
 const STATUS_POLL_MS = 5000
 
-const NEW_STACK_TEMPLATE = `x-litethaus:
-  domain: app.home.arpa
-  port: 80
-
-services:
+const NEW_STACK_TEMPLATE = `services:
   app:
     image: nginx:alpine
     restart: unless-stopped

@@ -1,4 +1,3 @@
-import io
 import logging
 import re
 import shutil
@@ -16,11 +15,30 @@ from icon_service import icon_service
 logger = logging.getLogger(__name__)
 
 _yaml = YAML()
+# ruamel's YAML() instance keeps mutable emitter/serializer state across
+# calls and isn't safe to use from multiple threads at once - the request
+# thread and the background file-watcher thread (watch_forever) both call
+# into it, so every load/dump funnels through here to serialize access.
+_yaml_lock = threading.Lock()
+
+
+def _yaml_load(stream: Any) -> Any:
+    with _yaml_lock:
+        return _yaml.load(stream)
+
+
+def _yaml_dump(data: Any, stream: Any) -> None:
+    with _yaml_lock:
+        _yaml.dump(data, stream)
+
 
 # Precedence order docker compose itself uses when no -f is given.
 COMPOSE_FILENAMES = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
 DEFAULT_COMPOSE_FILENAME = COMPOSE_FILENAMES[0]
 STACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+# Per-stack litethaus metadata (domain/port/icon/service) sidecar, kept
+# alongside the compose file so the compose file itself stays vanilla.
+METADATA_FILENAME = ".litethaus.yaml"
 
 
 def _override_candidates(primary_filename: str) -> tuple[str, ...]:
@@ -108,28 +126,57 @@ class StackService:
             return None
         return icon_service.guess(_icon_candidates(name, data))
 
+    def _read_metadata_node(self, meta_path: Path) -> Any:
+        # Returns the raw ruamel node (a CommentedMap, carrying comments) so
+        # callers that write it back preserve any hand-added comments -
+        # callers that only need a plain dict should wrap the result themselves.
+        if not meta_path.exists():
+            return {}
+        with meta_path.open("r") as f:
+            return _yaml_load(f) or {}
+
+    def _read_metadata_file(self, meta_path: Path) -> dict[str, Any]:
+        try:
+            return dict(self._read_metadata_node(meta_path))
+        except Exception:
+            return {}
+
+    def _atomic_write_yaml(self, path: Path, data: dict[str, Any]) -> None:
+        # ponytail: the tmp filename is deterministic per path, so two
+        # concurrent writers to the *same* file (e.g. overlapping scans from
+        # the file watcher) can race each other's tmp.replace() and raise
+        # FileNotFoundError - caught and logged by callers, self-heals on the
+        # next scan. Fine for this app's single-admin-user model; if
+        # concurrent multi-writer usage ever becomes real, switch to a
+        # unique tmp name per call (tempfile.mkstemp in the same dir).
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with tmp.open("w") as f:
+            _yaml_dump(data, f)
+        tmp.replace(path)
+
     def _backfill_icon(self, stack: Stack) -> None:
         if stack.error is not None or "icon" in stack.x_litethaus:
             return
         compose_path = Path(stack.path)
         try:
             with compose_path.open("r") as f:
-                data = _yaml.load(f) or {}
+                data = _yaml_load(f) or {}
         except Exception:
             return  # leave it for the next scan to retry
         guessed = self._guess_icon(stack.name, data)
         if not guessed:
             return
-        data.setdefault("x-litethaus", {})["icon"] = guessed
-        tmp = compose_path.with_suffix(compose_path.suffix + ".tmp")
+        meta_path = compose_path.parent / METADATA_FILENAME
         try:
-            with tmp.open("w") as f:
-                _yaml.dump(data, f)
-            tmp.replace(compose_path)
+            # load the raw sidecar node (not the dict-converted stack.x_litethaus)
+            # so any comments a user hand-added to it survive the rewrite
+            meta = self._read_metadata_node(meta_path)
+            meta["icon"] = guessed
+            self._atomic_write_yaml(meta_path, meta)
         except Exception:
             logger.exception("Failed to backfill icon for %s", stack.name)
             return
-        stack.x_litethaus = dict(data.get("x-litethaus") or {})
+        stack.x_litethaus = dict(meta)
 
     def _find_compose_files(self, entry: Path) -> list[Path]:
         return [entry / filename for filename in COMPOSE_FILENAMES if (entry / filename).exists()]
@@ -151,11 +198,26 @@ class StackService:
         override_file = override_path.name if override_path else None
         try:
             with compose_path.open("r") as f:
-                data = _yaml.load(f) or {}
+                data = _yaml_load(f) or {}
+            meta_path = compose_path.parent / METADATA_FILENAME
+            if meta_path.exists():
+                x_litethaus = self._read_metadata_file(meta_path)
+            elif data.get("x-litethaus"):
+                # one-time migration: metadata used to live embedded in the
+                # compose file - move it to the sidecar (writing the raw node
+                # so any comments inside the block survive) and strip it out
+                # so the compose file becomes vanilla docker-compose YAML.
+                embedded = data["x-litethaus"]
+                self._atomic_write_yaml(meta_path, embedded)
+                x_litethaus = dict(embedded)
+                del data["x-litethaus"]
+                self._atomic_write_yaml(compose_path, data)
+            else:
+                x_litethaus = {}
             return Stack(
                 name=name,
                 path=str(compose_path),
-                x_litethaus=dict(data.get("x-litethaus") or {}),
+                x_litethaus=x_litethaus,
                 services=list((data.get("services") or {}).keys()),
                 compose_files=compose_files,
                 override_file=override_file,
@@ -197,22 +259,14 @@ class StackService:
         return Path(stack.path).parent / filename
 
     def update_metadata(self, name: str, patch: dict[str, Any]) -> Stack:
-        path = Path(self._require(name).path)
-        with path.open("r") as f:
-            data = _yaml.load(f) or {}
-        x_litethaus = data.get("x-litethaus")
-        if x_litethaus is None:
-            x_litethaus = {}
-            data["x-litethaus"] = x_litethaus
+        meta_path = Path(self._require(name).path).parent / METADATA_FILENAME
+        meta = self._read_metadata_node(meta_path)
         for key, value in patch.items():
             if value is None:
-                x_litethaus.pop(key, None)
+                meta.pop(key, None)
             else:
-                x_litethaus[key] = value
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        with tmp.open("w") as f:
-            _yaml.dump(data, f)
-        tmp.replace(path)
+                meta[key] = value
+        self._atomic_write_yaml(meta_path, meta)
         self.scan()
         return self._require(name)
 
@@ -222,19 +276,12 @@ class StackService:
         stack_dir = self.stacks_dir / name
         if stack_dir.exists():
             raise ValueError(f"stack {name!r} already exists")
-        data = _yaml.load(content) or {}  # raises on invalid YAML - same effect as _validate_yaml
-        x_litethaus = data.get("x-litethaus") or {}
-        if "icon" not in x_litethaus:
-            guessed = self._guess_icon(name, data)
-            if guessed:
-                # only touch content when we actually inject something, so a
-                # miss or an already-set icon leaves the submitted text as-is
-                data.setdefault("x-litethaus", {})["icon"] = guessed
-                buf = io.StringIO()
-                _yaml.dump(data, buf)
-                content = buf.getvalue()
+        self._validate_yaml(content)
         stack_dir.mkdir(parents=True)
         (stack_dir / DEFAULT_COMPOSE_FILENAME).write_text(content)
+        # scan() migrates any embedded x-litethaus the submitted content
+        # happens to contain and backfills the icon, same path pre-existing
+        # stacks go through - no special-casing needed here.
         self.scan()
         return self._require(name)
 
@@ -249,7 +296,7 @@ class StackService:
         return stacks[name]
 
     def _validate_yaml(self, content: str) -> None:
-        _yaml.load(content)
+        _yaml_load(content)
 
     def watch_forever(self) -> None:
         # Re-reads self.stacks_dir on every restart, so a config change picked
