@@ -22,6 +22,11 @@ auth_enabled: true
 # Directory containing one subfolder per stack, each with its own docker-compose.yaml
 stacks_dir: /opt/litethaus/stacks
 
+# Prepended to every Compose project name and to the shared "litethaus" Docker
+# network. Set this if another litethaus instance runs on the same host, so
+# the two never resolve to the same Compose project/containers/network.
+project_prefix: ""
+
 # Whether litethaus manages the bundled Caddy reverse proxy. Set to false if
 # you're fronting your own stacks with a different reverse proxy - litethaus
 # will skip pushing config to Caddy entirely (domain/port fields in stacks

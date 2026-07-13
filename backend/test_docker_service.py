@@ -1,10 +1,20 @@
+import tempfile
+from pathlib import Path
+
+from config_service import ConfigService
 from docker_service import DockerService
 from stacks_service import Stack
 
 
+def _svc() -> DockerService:
+    # A fresh, unbootstrapped config path so tests never touch the real
+    # /opt/litethaus/config.yaml or depend on project_prefix being unset there.
+    return DockerService(config=ConfigService(Path(tempfile.mkdtemp()) / "config.yaml"))
+
+
 def test_compose_cmd_uses_project_name_and_compose_file() -> None:
     stack = Stack(name="example", path="/opt/litethaus/stacks/example/docker-compose.yaml")
-    svc = DockerService()
+    svc = _svc()
 
     assert svc._compose_cmd(stack, "up", "-d") == [
         "docker",
@@ -37,7 +47,7 @@ def test_compose_cmd_adds_override_file_when_present() -> None:
         path="/opt/litethaus/stacks/example/compose.yaml",
         override_file="compose.override.yaml",
     )
-    svc = DockerService()
+    svc = _svc()
 
     assert svc._compose_cmd(stack, "up", "-d") == [
         "docker",

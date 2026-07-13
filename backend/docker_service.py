@@ -9,15 +9,16 @@ from typing import Any
 import docker
 from docker.errors import NotFound
 
+from config_service import ConfigService, config_service as _default_config_service
 from stacks_service import Stack
 
-NETWORK_NAME = "litethaus"
 BAD_HEALTH_STATES = {"unhealthy", "restarting"}
 
 
 class DockerService:
-    def __init__(self) -> None:
+    def __init__(self, config: ConfigService = _default_config_service) -> None:
         self._client: docker.DockerClient | None = None
+        self._config = config
 
     @property
     def client(self) -> docker.DockerClient:
@@ -25,14 +26,24 @@ class DockerService:
             self._client = docker.from_env()
         return self._client
 
+    def _prefix(self) -> str:
+        return self._config.load().get("project_prefix", "") or ""
+
+    def _project_name(self, stack: Stack) -> str:
+        return f"{self._prefix()}{stack.name}"
+
+    def _network_name(self) -> str:
+        return f"{self._prefix()}litethaus"
+
     def ensure_network(self) -> None:
+        network_name = self._network_name()
         try:
-            self.client.networks.get(NETWORK_NAME)
+            self.client.networks.get(network_name)
         except NotFound:
-            self.client.networks.create(NETWORK_NAME, driver="bridge")
+            self.client.networks.create(network_name, driver="bridge")
 
     def _compose_cmd(self, stack: Stack, *args: str) -> list[str]:
-        cmd = ["docker", "compose", "-p", stack.name, "-f", stack.path]
+        cmd = ["docker", "compose", "-p", self._project_name(stack), "-f", stack.path]
         if stack.override_file:
             cmd += ["-f", str(Path(stack.path).parent / stack.override_file)]
         return cmd + list(args)
@@ -86,13 +97,13 @@ class DockerService:
 
     def container_details(self, stack: Stack) -> list[dict[str, Any]]:
         containers = self.client.containers.list(
-            all=True, filters={"label": f"com.docker.compose.project={stack.name}"}
+            all=True, filters={"label": f"com.docker.compose.project={self._project_name(stack)}"}
         )
         return [self._describe(c) for c in containers]
 
     def find_container(self, stack: Stack, container_name: str) -> Any | None:
         for c in self.client.containers.list(
-            all=True, filters={"label": f"com.docker.compose.project={stack.name}"}
+            all=True, filters={"label": f"com.docker.compose.project={self._project_name(stack)}"}
         ):
             if c.name == container_name:
                 return c

@@ -12,6 +12,7 @@ const HTTPS_MODE_OPTIONS = [
 
 interface FormState {
   stacks_dir: string
+  project_prefix: string
   caddy_enabled: boolean
   auto_icon_enabled: boolean
   caddy_admin_url: string
@@ -28,6 +29,7 @@ export function SettingsPage() {
   const [config, setConfig] = useState<Config | null>(null)
   const [form, setForm] = useState<FormState>({
     stacks_dir: '',
+    project_prefix: '',
     caddy_enabled: true,
     auto_icon_enabled: true,
     caddy_admin_url: '',
@@ -56,6 +58,7 @@ export function SettingsPage() {
         setConfig(cfg)
         setForm({
           stacks_dir: String(cfg.stacks_dir ?? ''),
+          project_prefix: String(cfg.project_prefix ?? ''),
           caddy_enabled: Boolean(cfg.caddy_enabled ?? true),
           auto_icon_enabled: Boolean(cfg.auto_icon_enabled ?? true),
           caddy_admin_url: String(cfg.caddy_admin_url ?? ''),
@@ -123,6 +126,23 @@ export function SettingsPage() {
           onChange={(e) => setForm((f) => ({ ...f, stacks_dir: e.target.value }))}
           className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+          Compose project prefix
+        </label>
+        <input
+          value={form.project_prefix}
+          onChange={(e) => setForm((f) => ({ ...f, project_prefix: e.target.value }))}
+          placeholder="e.g. dev- (optional)"
+          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+        />
+        <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+          Prepended to every Compose project name and to the shared "litethaus" Docker network. Set
+          this if another litethaus instance runs on the same host, so the two never see or control
+          each other's containers.
+        </p>
       </div>
 
       <div className="flex items-start gap-2">

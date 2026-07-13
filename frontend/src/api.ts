@@ -117,6 +117,7 @@ export function terminalSocketUrl(name: string, container: string): string {
 
 export interface Config {
   stacks_dir: string
+  project_prefix: string
   caddy_enabled: boolean
   auto_icon_enabled: boolean
   caddy_admin_url: string
