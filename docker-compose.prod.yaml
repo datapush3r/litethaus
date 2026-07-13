@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: litethaus
+    restart: unless-stopped
+    volumes:
+      - ./data:/opt/litethaus
+      - /docker:/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+
+  caddy:
+    profiles: ["caddy"]
+    build:
+      context: ./caddy
+    container_name: litethaus-caddy
+    restart: unless-stopped
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    command: caddy run --config /etc/caddyfile
+    ports:
+      # Staging port while NPM still owns host 443 - flip to "443:443" only
+      # at the atomic cutover once every domain is validated (see plan).
+      - "8443:443"
+    expose:
+      - "2019"
+    networks:
+      - default
+      - litethaus
+
+networks:
+  litethaus:
+    name: litethaus
+
+volumes:
+  caddy_data:
+  caddy_config:

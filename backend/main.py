@@ -3,11 +3,12 @@ import os
 import threading
 from contextlib import aclosing, asynccontextmanager, suppress
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from auth_service import SESSION_COOKIE, SESSION_TTL_SECONDS, auth_service
 from caddy_service import caddy_service
@@ -41,11 +42,22 @@ PUBLIC_PATHS = {"/health", "/auth/status", "/auth/setup", "/auth/login"}
 
 @app.middleware("http")
 async def enforce_auth(request: Request, call_next):
+    # In production the built frontend and the API are served from the same
+    # origin, with the frontend calling "/api/*" (matching its dev-time Vite
+    # proxy rewrite - see vite.config.ts). Requests outside "/api/" are static
+    # SPA assets and always pass through untouched; "/api/*" gets the prefix
+    # stripped before routing so the existing handlers below (registered
+    # without the prefix) don't need to change.
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    request.scope["path"] = path[len("/api") :] or "/"
+
     # Open by default until a password is actually set (first-run UX, like
     # most self-hosted dashboards) or while auth_enabled is set to false in
     # config.yaml (local testing); once configured, everything except the
     # small public/auth surface requires a valid session cookie.
-    if request.url.path in PUBLIC_PATHS or not auth_service.enabled() or not auth_service.is_configured():
+    if request.scope["path"] in PUBLIC_PATHS or not auth_service.enabled() or not auth_service.is_configured():
         return await call_next(request)
     if not auth_service.is_valid_session(request.cookies.get(SESSION_COOKIE)):
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
@@ -238,7 +250,7 @@ def stack_update(name: str) -> dict[str, Any]:
     return {"ok": ok, "output": output}
 
 
-@app.websocket("/stacks/{name}/logs")
+@app.websocket("/api/stacks/{name}/logs")
 async def stack_logs(websocket: WebSocket, name: str, container: str | None = None) -> None:
     # HTTP middleware doesn't run for websocket connections, so the session
     # cookie (sent automatically on the same-origin upgrade request) needs
@@ -293,7 +305,7 @@ async def stack_logs(websocket: WebSocket, name: str, container: str | None = No
             task.result()
 
 
-@app.websocket("/stacks/{name}/terminal")
+@app.websocket("/api/stacks/{name}/terminal")
 async def stack_terminal(websocket: WebSocket, name: str, container: str) -> None:
     if auth_service.enabled() and auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
         await websocket.close(code=4401)
@@ -341,3 +353,19 @@ async def stack_terminal(websocket: WebSocket, name: str, container: str) -> Non
             await task
     process.terminate()
     os.close(master_fd)
+
+
+# Built frontend assets (backend/Dockerfile copies the Vite `dist/` build
+# here). Absent in dev (`uvicorn --reload`, no build step), so this route is
+# simply never registered there. Registered last so every "/api/*" route
+# above always matches first.
+STATIC_DIR = Path(__file__).parent / "static"
+
+if STATIC_DIR.is_dir():
+
+    @app.get("/{full_path:path}")
+    async def spa(full_path: str) -> FileResponse:
+        candidate = STATIC_DIR / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(STATIC_DIR / "index.html")
