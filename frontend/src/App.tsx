@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Loader2, Menu, PackageOpen } from 'lucide-react'
+import { AlertTriangle, LayoutGrid, List, Loader2, Menu, PackageOpen, Search } from 'lucide-react'
 import {
   authLogout,
   createStack,
@@ -11,6 +11,7 @@ import {
   stackRestart,
   stackUp,
   stackUpdate,
+  updateStackMetadata,
   type AuthStatus,
   type Stack,
   type StackState,
@@ -104,6 +105,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [route, navigate] = useRoute()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [httpsPort, setHttpsPort] = useState(443)
+  const [search, setSearch] = useState('')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(
+    () => (localStorage.getItem('litethaus-view') as 'grid' | 'list' | null) ?? 'grid',
+  )
+
+  useEffect(() => {
+    localStorage.setItem('litethaus-view', viewMode)
+  }, [viewMode])
 
   useEffect(() => {
     fetchConfig()
@@ -194,6 +203,17 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     return runAction(stack, stackUpdate)
   }
 
+  async function handleToggleFavorite(stack: Stack) {
+    await updateStackMetadata(stack.name, { favorite: stack.x_litethaus.favorite ? null : true })
+    await refreshStacks()
+  }
+
+  const visibleStacks = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    const filtered = query ? (stacks ?? []).filter((s) => s.name.toLowerCase().includes(query)) : (stacks ?? [])
+    return [...filtered].sort((a, b) => Number(!!b.x_litethaus.favorite) - Number(!!a.x_litethaus.favorite))
+  }, [stacks, search])
+
   const selectedStack = route.view === 'stack' ? (stacks?.find((s) => s.name === route.name) ?? null) : null
 
   const listView = route.view === 'stacks' || route.view === 'stack'
@@ -238,6 +258,36 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <Menu size={20} />
           </button>
           <h1 className="text-sm text-neutral-500 dark:text-neutral-400">{heading}</h1>
+
+          {route.view === 'stacks' && (
+            <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
+                <Search size={14} className="shrink-0 text-neutral-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search stacks…"
+                  className="w-32 bg-transparent text-sm outline-none sm:w-48 dark:text-neutral-100"
+                />
+              </div>
+              <div className="flex items-center gap-1 rounded border border-neutral-300 p-0.5 dark:border-neutral-700">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  aria-label="Grid view"
+                  className={`rounded p-1 ${viewMode === 'grid' ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100' : 'text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300'}`}
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  aria-label="List view"
+                  className={`rounded p-1 ${viewMode === 'list' ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100' : 'text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300'}`}
+                >
+                  <List size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
@@ -274,6 +324,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             </div>
           )}
 
+          {route.view === 'stacks' && stacks !== null && stacks.length > 0 && visibleStacks.length === 0 && (
+            <div className="flex flex-col items-center gap-2 py-16 text-center text-neutral-400 dark:text-neutral-500">
+              <Search size={28} />
+              <p className="text-sm">No stacks match your search.</p>
+            </div>
+          )}
+
           {route.view === 'stack' && stacks !== null && selectedStack && (
             <StackDetail
               stack={selectedStack}
@@ -292,9 +349,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             />
           )}
 
-          {route.view === 'stacks' && stacks !== null && stacks.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {stacks.map((stack) => (
+          {route.view === 'stacks' && stacks !== null && visibleStacks.length > 0 && (
+            <div
+              className={
+                viewMode === 'grid' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3' : 'flex flex-col gap-2'
+              }
+            >
+              {visibleStacks.map((stack) => (
                 <StackCard
                   key={stack.name}
                   stack={stack}
@@ -302,8 +363,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   status={statuses[stack.name] ?? null}
                   health={health[stack.name]?.health ?? null}
                   busy={!!busy[stack.name]}
+                  layout={viewMode}
+                  favorite={!!stack.x_litethaus.favorite}
                   onToggle={() => handleToggle(stack)}
                   onOpen={() => navigate({ view: 'stack', name: stack.name })}
+                  onToggleFavorite={() => handleToggleFavorite(stack)}
                 />
               ))}
             </div>

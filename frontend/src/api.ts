@@ -89,7 +89,13 @@ export async function updateStackRaw(name: string, content: string, file?: strin
 
 export async function updateStackMetadata(
   name: string,
-  patch: { icon?: string | null; port?: number | null; domain?: string | null; service?: string | null }
+  patch: {
+    icon?: string | null
+    port?: number | null
+    domain?: string | null
+    service?: string | null
+    favorite?: boolean | null
+  }
 ): Promise<Stack> {
   const res = await fetch(`/api/stacks/${name}/metadata`, {
     method: 'PATCH',
