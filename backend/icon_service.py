@@ -22,29 +22,43 @@ class IconService:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._catalog: dict[str, str] | None = None  # normalized alias/slug -> canonical slug
+        self._fetch_in_progress = False
 
-    def _load_catalog(self) -> dict[str, str]:
-        # ponytail: process-lifetime cache, one urlopen ever - restart to pick up catalog changes
+    def _start_fetch(self) -> None:
+        # Fetches on a background thread so callers (in particular
+        # stack_service.scan(), which runs synchronously in main.py's
+        # startup lifespan) never block on this network call. Only caches
+        # the catalog on success - a failed fetch just clears the in-progress
+        # flag, so the next guess() call retries instead of the catalog
+        # staying permanently empty for the rest of the process's life.
         with self._lock:
-            if self._catalog is not None:
-                return self._catalog
-            catalog: dict[str, str] = {}
-            try:
-                with urllib.request.urlopen(METADATA_URL, timeout=10) as resp:
-                    data: dict[str, Any] = json.load(resp)
-                for slug, meta in data.items():
-                    catalog[_normalize(slug)] = slug
-                    for alias in meta.get("aliases") or []:
-                        catalog.setdefault(_normalize(alias), slug)
-            except Exception:
-                logger.exception("Failed to fetch icon catalog")
-                catalog = {}
-            self._catalog = catalog
-            return catalog
+            if self._catalog is not None or self._fetch_in_progress:
+                return
+            self._fetch_in_progress = True
+        threading.Thread(target=self._fetch, daemon=True).start()
+
+    def _fetch(self) -> None:
+        catalog: dict[str, str] = {}
+        try:
+            with urllib.request.urlopen(METADATA_URL, timeout=10) as resp:
+                data: dict[str, Any] = json.load(resp)
+            for slug, meta in data.items():
+                catalog[_normalize(slug)] = slug
+                for alias in meta.get("aliases") or []:
+                    catalog.setdefault(_normalize(alias), slug)
+        except Exception:
+            logger.exception("Failed to fetch icon catalog")
+            catalog = {}
+        with self._lock:
+            self._fetch_in_progress = False
+            if catalog:
+                self._catalog = catalog
 
     def guess(self, candidates: list[str]) -> str | None:
-        catalog = self._load_catalog()
-        if not catalog:
+        with self._lock:
+            catalog = self._catalog
+        if catalog is None:
+            self._start_fetch()
             return None
         normalized = [_normalize(c) for c in candidates]
         normalized = [c for c in normalized if len(c) >= MIN_CANDIDATE_LEN]

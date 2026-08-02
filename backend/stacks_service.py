@@ -298,6 +298,17 @@ class StackService:
     def _validate_yaml(self, content: str) -> None:
         _yaml_load(content)
 
+    def _watch_paths(self) -> list[Path]:
+        # stacks_dir itself (to notice stacks being added/removed) plus each
+        # existing stack's own folder, non-recursively - deliberately never
+        # descends into a stack's own data/media/db subfolders, which is
+        # what made recursive=True over stacks_dir a problem when stacks_dir
+        # is pointed at a host's whole compose root: it would inotify-watch
+        # every file in every container's bind mounts, not just compose
+        # files. See CLAUDE.md architecture note 1.
+        stacks_dir = self.stacks_dir
+        return [stacks_dir] + [d for d in stacks_dir.iterdir() if d.is_dir()]
+
     def watch_forever(self) -> None:
         # Re-reads self.stacks_dir on every restart, so a config change picked
         # up via restart_watcher() moves the watch to the new directory
@@ -305,8 +316,9 @@ class StackService:
         while True:
             stop_event = threading.Event()
             self._watch_stop_event = stop_event
-            for _ in watch(self.stacks_dir, recursive=True, stop_event=stop_event):
+            for _ in watch(*self._watch_paths(), recursive=False, stop_event=stop_event):
                 self.scan()
+                break  # a stack may have been added/removed - rebuild the watch list
 
     def restart_watcher(self) -> None:
         if self._watch_stop_event is not None:

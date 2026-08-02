@@ -308,6 +308,23 @@ def test_scan_migrates_embedded_x_litethaus_to_sidecar_and_preserves_compose_com
         assert compose_text.startswith("# a comment worth keeping\n")
 
 
+def test_watch_paths_covers_stacks_dir_and_each_stack_dir_only() -> None:
+    # Must stay bounded to stacks_dir plus its immediate stack subdirectories -
+    # never recurse into a stack's own data/media/db subfolders (that's what
+    # made watch_forever expensive when stacks_dir points at a host's whole
+    # compose root; see CLAUDE.md architecture note 1).
+    with tempfile.TemporaryDirectory() as tmp:
+        stacks_dir = Path(tmp)
+        (stacks_dir / "plex").mkdir()
+        (stacks_dir / "plex" / "data").mkdir()  # nested - must NOT appear in watch paths
+        (stacks_dir / "sonarr").mkdir()
+        (stacks_dir / "not-a-dir.txt").write_text("")
+
+        svc = StackService(stacks_dir=stacks_dir)
+
+        assert set(svc._watch_paths()) == {stacks_dir, stacks_dir / "plex", stacks_dir / "sonarr"}
+
+
 def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
     svc = StackService(stacks_dir=Path("/tmp"))
 
@@ -336,5 +353,6 @@ if __name__ == "__main__":
     test_scan_backfills_icon_for_existing_iconless_stack()
     test_scan_does_not_overwrite_explicit_empty_icon()
     test_scan_migrates_embedded_x_litethaus_to_sidecar_and_preserves_compose_comments()
+    test_watch_paths_covers_stacks_dir_and_each_stack_dir_only()
     test_restart_watcher_signals_the_current_stop_event_when_armed()
     print("ok")
