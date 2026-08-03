@@ -9,6 +9,10 @@ from stacks_service import Stack
 
 logger = logging.getLogger(__name__)
 
+# Applied to a stack's route when its .litethaus.yaml sets lan_only: true -
+# same private-address ranges a typical LAN-allowlist reverse-proxy rule uses.
+LAN_ONLY_RANGES = ["10.0.0.0/8", "172.0.0.0/16", "192.168.0.0/16"]
+
 
 class CaddyService:
     def __init__(self, admin_url: str | None = None) -> None:
@@ -52,9 +56,12 @@ class CaddyService:
                 continue
             domains.append(domain)
             upstream_service = meta.get("service") or (stack.services[0] if stack.services else stack.name)
+            match: dict[str, Any] = {"host": [domain]}
+            if meta.get("lan_only"):
+                match["remote_ip"] = {"ranges": LAN_ONLY_RANGES}
             routes.append(
                 {
-                    "match": [{"host": [domain]}],
+                    "match": [match],
                     "handle": [
                         {
                             "handler": "reverse_proxy",

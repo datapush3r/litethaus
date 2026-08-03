@@ -18,6 +18,20 @@ def test_build_config_only_includes_routable_stacks() -> None:
     assert routes[0]["handle"][0]["upstreams"] == [{"dial": "web:8080"}]
 
 
+def test_build_config_adds_remote_ip_restriction_when_lan_only() -> None:
+    stacks = [
+        Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 80, "lan_only": True}, services=["web"]),
+        Stack(name="public", path="x", x_litethaus={"domain": "public.home.arpa", "port": 80}, services=["web"]),
+    ]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert routes[0]["match"] == [
+        {"host": ["app.home.arpa"], "remote_ip": {"ranges": ["10.0.0.0/8", "172.0.0.0/16", "192.168.0.0/16"]}}
+    ]
+    assert routes[1]["match"] == [{"host": ["public.home.arpa"]}]
+
+
 def test_build_config_prefers_explicit_service_over_first_service() -> None:
     stacks = [
         Stack(
@@ -140,6 +154,7 @@ def test_build_config_skips_malformed_extra_routes_without_raising() -> None:
 
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
+    test_build_config_adds_remote_ip_restriction_when_lan_only()
     test_build_config_prefers_explicit_service_over_first_service()
     test_build_config_pins_admin_listener_so_reloads_dont_cut_off_the_api()
     test_build_config_defaults_to_http_only()

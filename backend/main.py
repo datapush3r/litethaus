@@ -241,7 +241,7 @@ def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
 @app.patch("/stacks/{name}/metadata")
 def update_stack_metadata(name: str, body: dict[str, Any]) -> dict[str, Any]:
     _get_stack(name)
-    allowed = {"icon", "port", "domain", "service", "favorite"}
+    allowed = {"icon", "port", "domain", "service", "favorite", "lan_only"}
     patch = {k: v for k, v in body.items() if k in allowed}
     try:
         stack = stack_service.update_metadata(name, patch)

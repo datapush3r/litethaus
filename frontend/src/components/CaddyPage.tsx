@@ -149,6 +149,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
                 <th className="px-3 py-2">Domain</th>
                 <th className="px-3 py-2">Service</th>
                 <th className="px-3 py-2">Port</th>
+                <th className="px-3 py-2">LAN only</th>
               </tr>
             </thead>
             <tbody>
@@ -157,7 +158,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
               ))}
               {routableStacks.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-2 text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={5} className="px-3 py-2 text-neutral-400 dark:text-neutral-500">
                     no stacks found
                   </td>
                 </tr>
@@ -246,6 +247,7 @@ function RouteRow({ stack, onSaved }: { stack: Stack; onSaved: () => void }) {
   const domain = typeof meta.domain === 'string' ? meta.domain : null
   const port = meta.port != null ? String(meta.port) : null
   const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? '')
+  const lanOnly = Boolean(meta.lan_only)
 
   const [domainDraft, setDomainDraft] = useState(domain ?? '')
   const [portDraft, setPortDraft] = useState(port ?? '')
@@ -258,7 +260,12 @@ function RouteRow({ stack, onSaved }: { stack: Stack; onSaved: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stack.name, domain, port])
 
-  async function save(patch: { domain?: string | null; port?: number | null; service?: string | null }) {
+  async function save(patch: {
+    domain?: string | null
+    port?: number | null
+    service?: string | null
+    lan_only?: boolean | null
+  }) {
     setError(null)
     try {
       await updateStackMetadata(stack.name, patch)
@@ -324,6 +331,14 @@ function RouteRow({ stack, onSaved }: { stack: Stack; onSaved: () => void }) {
           className="w-20 rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
         {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      </td>
+      <td className="px-3 py-1.5 text-center">
+        <input
+          type="checkbox"
+          checked={lanOnly}
+          onChange={(e) => save({ lan_only: e.target.checked || null })}
+          title="Restrict to private/LAN IP ranges only"
+        />
       </td>
     </tr>
   )

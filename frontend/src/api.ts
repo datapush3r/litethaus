@@ -95,6 +95,7 @@ export async function updateStackMetadata(
     domain?: string | null
     service?: string | null
     favorite?: boolean | null
+    lan_only?: boolean | null
   }
 ): Promise<Stack> {
   const res = await fetch(`/api/stacks/${name}/metadata`, {
