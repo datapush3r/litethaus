@@ -100,6 +100,12 @@ class CaddyService:
                         "litethaus": {
                             "listen": listen,
                             "routes": routes,
+                            # h2/h3 (advertised via Alt-Svc) cause some media-streaming
+                            # clients - e.g. Plex on Android TV - to hang mid-stream with
+                            # broken-pipe/stream-closed errors on large range-request
+                            # bodies. h1-only fixed a live streaming session during
+                            # rollout; no real downside for a home reverse proxy.
+                            "protocols": ["h1"],
                         }
                     }
                 }
