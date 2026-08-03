@@ -11,6 +11,15 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: litethaus
+            context: .
+            file: backend/Dockerfile
+          - image: litethaus-caddy
+            context: ./caddy
+            file: caddy/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -23,15 +32,15 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=raw,value=latest
             type=sha,format=short
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
-          file: backend/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
