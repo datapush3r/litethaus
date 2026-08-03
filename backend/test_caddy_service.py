@@ -32,6 +32,29 @@ def test_build_config_adds_remote_ip_restriction_when_lan_only() -> None:
     assert routes[1]["match"] == [{"host": ["public.home.arpa"]}]
 
 
+def test_build_config_adds_trailing_wildcard_catchall_when_acme_and_wildcard_domain() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.example.com", "port": 80}, services=["web"])]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(
+        stacks, https_mode="acme", acme_email="me@example.com", wildcard_domain="example.com"
+    )
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert routes[-1]["match"] == [{"host": ["*.example.com"]}]
+    assert routes[-1]["handle"] == [{"handler": "static_response", "status_code": 404}]
+    # the real per-stack route still comes first, so it isn't shadowed
+    assert routes[0]["match"] == [{"host": ["app.example.com"]}]
+
+
+def test_build_config_skips_wildcard_catchall_without_wildcard_domain_or_acme() -> None:
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([], https_mode="acme")
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+    assert routes == []
+
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([], https_mode="off", wildcard_domain="example.com")
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+    assert routes == []
+
+
 def test_build_config_restricts_server_to_http1_only() -> None:
     cfg = CaddyService(admin_url="http://caddy:2019").build_config([])
     assert cfg["apps"]["http"]["servers"]["litethaus"]["protocols"] == ["h1"]
@@ -159,6 +182,8 @@ def test_build_config_skips_malformed_extra_routes_without_raising() -> None:
 
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
+    test_build_config_adds_trailing_wildcard_catchall_when_acme_and_wildcard_domain()
+    test_build_config_skips_wildcard_catchall_without_wildcard_domain_or_acme()
     test_build_config_restricts_server_to_http1_only()
     test_build_config_adds_remote_ip_restriction_when_lan_only()
     test_build_config_prefers_explicit_service_over_first_service()

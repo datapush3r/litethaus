@@ -80,6 +80,24 @@ class CaddyService:
             except Exception:
                 logger.exception("Failed to parse caddy_extra_routes_json, skipping")
 
+        if https_mode == "acme" and wildcard_domain:
+            # Caddy only requests a cert for whatever literal hostname string
+            # it sees in a route's host matcher - every route above uses an
+            # exact FQDN, so Caddy never once sees "*.<wildcard_domain>" and
+            # never actually requests the wildcard cert the automation policy
+            # below allows, issuing a separate leaf cert per subdomain instead.
+            # This catch-all (placed last, so it never shadows a real route)
+            # makes Caddy discover and obtain the real wildcard cert once;
+            # cert selection at handshake time then matches any subdomain's
+            # SNI against it. Doubles as a proper 404 for any unmapped
+            # subdomain instead of the default blank 200.
+            routes.append(
+                {
+                    "match": [{"host": [f"*.{wildcard_domain}"]}],
+                    "handle": [{"handler": "static_response", "status_code": 404}],
+                }
+            )
+
         # When HTTPS is on, listen on :443 only and let Caddy's automatic_https
         # feature synthesize the :80 -> :443 redirect itself. If we listened on
         # :80 ourselves with these same host-matched routes, our own route would
