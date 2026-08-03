@@ -125,7 +125,16 @@ def get_config() -> dict[str, Any]:
     return data
 
 
-CADDY_RELEVANT_KEYS = {"stacks_dir", "https_mode", "acme_email", "caddy_admin_url", "cloudflare_api_token", "wildcard_domain", "caddy_enabled"}
+CADDY_RELEVANT_KEYS = {
+    "stacks_dir",
+    "https_mode",
+    "acme_email",
+    "caddy_admin_url",
+    "cloudflare_api_token",
+    "wildcard_domain",
+    "caddy_enabled",
+    "caddy_extra_routes_json",
+}
 
 
 @app.patch("/config")
@@ -143,6 +152,46 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
     updated = dict(updated)
     updated.pop("auth", None)
     return updated
+
+
+def _redact_secrets(value: Any) -> Any:
+    # Caddy needs the plaintext Cloudflare token to do DNS-01 challenges, so
+    # build_config()/Caddy's own /config/ both legitimately contain it - but
+    # these two read endpoints feed a browser-visible panel, a new exposure
+    # surface the token never had when it only ever traveled server-to-server.
+    if isinstance(value, dict):
+        return {k: ("***redacted***" if k == "api_token" else _redact_secrets(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_secrets(v) for v in value]
+    return value
+
+
+@app.get("/caddy/status")
+def caddy_status() -> dict[str, Any]:
+    return caddy_service.status()
+
+
+@app.get("/caddy/config")
+def caddy_config() -> dict[str, Any]:
+    cfg = config_service.load()
+    config = caddy_service.build_config(
+        stack_service.list_stacks(),
+        https_mode=cfg.get("https_mode", "off"),
+        acme_email=cfg.get("acme_email", ""),
+        cloudflare_api_token=cfg.get("cloudflare_api_token", ""),
+        wildcard_domain=cfg.get("wildcard_domain", ""),
+        extra_routes_json=cfg.get("caddy_extra_routes_json", ""),
+    )
+    return _redact_secrets(config)
+
+
+@app.get("/caddy/live")
+def caddy_live() -> dict[str, Any]:
+    try:
+        config = caddy_service.fetch_live_config()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Caddy unreachable: {exc}")
+    return _redact_secrets(config)
 
 
 @app.get("/stacks")

@@ -132,6 +132,7 @@ export interface Config {
   acme_email: string
   cloudflare_api_token: string
   wildcard_domain: string
+  caddy_extra_routes_json: string
   theme: string
   webhook_url: string
   [key: string]: unknown
@@ -194,4 +195,26 @@ export async function changePassword(currentPassword: string, newPassword: strin
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   })
   await unwrap(res, 'failed to change password')
+}
+
+export interface CaddyStatus {
+  enabled: boolean
+  ok?: boolean
+  at?: string
+  error?: string | null
+}
+
+export async function fetchCaddyStatus(): Promise<CaddyStatus> {
+  const res = await fetch('/api/caddy/status')
+  return unwrap<CaddyStatus>(res, 'failed to load Caddy status')
+}
+
+export async function fetchCaddyConfig(): Promise<Record<string, unknown>> {
+  const res = await fetch('/api/caddy/config')
+  return unwrap(res, 'failed to load generated Caddy config')
+}
+
+export async function fetchCaddyLive(): Promise<Record<string, unknown>> {
+  const res = await fetch('/api/caddy/live')
+  return unwrap(res, 'Caddy unreachable')
 }

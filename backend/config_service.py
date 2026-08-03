@@ -66,6 +66,12 @@ cloudflare_api_token: ""
 # wildcard). Leave blank to keep today's per-stack-domain certs.
 wildcard_domain: ""
 
+# Advanced: raw Caddy route objects (JSON array) appended after the routes
+# litethaus generates per-stack, for cases the domain/port/service model
+# doesn't cover. Leave blank to skip. Invalid JSON is ignored (logged) rather
+# than breaking the sync.
+caddy_extra_routes_json: ""
+
 # UI theme: "light", "dark", or "system"
 theme: system
 

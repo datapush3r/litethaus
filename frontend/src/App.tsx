@@ -18,6 +18,7 @@ import {
   type StackStatus,
 } from './api'
 import { AuthScreen } from './components/AuthScreen'
+import { CaddyPage } from './components/CaddyPage'
 import { StackCard } from './components/StackCard'
 import { StackDetail } from './components/StackDetail'
 import { StackEditor } from './components/StackEditor'
@@ -221,9 +222,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const heading =
     route.view === 'settings'
       ? 'Settings'
-      : route.view === 'new'
-        ? 'New Stack'
-        : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
+      : route.view === 'caddy'
+        ? 'Caddy'
+        : route.view === 'new'
+          ? 'New Stack'
+          : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -244,6 +247,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         open={sidebarOpen}
         onSelectStack={(name) => navigate(name ? { view: 'stack', name } : { view: 'stacks' })}
         onOpenSettings={() => navigate({ view: 'settings' })}
+        onOpenCaddy={() => navigate({ view: 'caddy' })}
         onNewStack={() => navigate({ view: 'new' })}
         onLogout={() => authLogout().then(onLogout)}
       />
@@ -292,6 +296,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
           {route.view === 'settings' && <SettingsPage />}
+
+          {route.view === 'caddy' && <CaddyPage stacks={stacks ?? []} onStacksChanged={refreshStacks} />}
 
           {route.view === 'new' && (
             <StackEditor

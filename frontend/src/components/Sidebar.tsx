@@ -8,6 +8,7 @@ import {
   LogOut,
   Plus,
   Settings as SettingsIcon,
+  Waypoints,
 } from 'lucide-react'
 import type { Stack, StackState, StackStatus } from '../api'
 import type { Route } from '../routing'
@@ -26,6 +27,7 @@ interface SidebarProps {
   open: boolean
   onSelectStack: (name: string | null) => void
   onOpenSettings: () => void
+  onOpenCaddy: () => void
   onNewStack: () => void
   onLogout: () => void
 }
@@ -39,6 +41,7 @@ export function Sidebar({
   open,
   onSelectStack,
   onOpenSettings,
+  onOpenCaddy,
   onNewStack,
   onLogout,
 }: SidebarProps) {
@@ -151,6 +154,17 @@ export function Sidebar({
         >
           <SettingsIcon size={14} className="text-neutral-400 dark:text-neutral-500" />
           Settings
+        </button>
+        <button
+          onClick={onOpenCaddy}
+          className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
+            route.view === 'caddy'
+              ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+              : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+          }`}
+        >
+          <Waypoints size={14} className="text-neutral-400 dark:text-neutral-500" />
+          Caddy
         </button>
         <button
           onClick={onLogout}

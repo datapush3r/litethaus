@@ -1,9 +1,15 @@
-export type Route = { view: 'stacks' } | { view: 'stack'; name: string } | { view: 'settings' } | { view: 'new' }
+export type Route =
+  | { view: 'stacks' }
+  | { view: 'stack'; name: string }
+  | { view: 'settings' }
+  | { view: 'caddy' }
+  | { view: 'new' }
 
 const STACK_PREFIX = '/stacks/'
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/settings') return { view: 'settings' }
+  if (pathname === '/caddy') return { view: 'caddy' }
   if (pathname === '/new') return { view: 'new' }
   if (pathname.startsWith(STACK_PREFIX)) {
     const name = decodeURIComponent(pathname.slice(STACK_PREFIX.length))
@@ -14,6 +20,7 @@ export function parseRoute(pathname: string): Route {
 
 export function routePath(route: Route): string {
   if (route.view === 'settings') return '/settings'
+  if (route.view === 'caddy') return '/caddy'
   if (route.view === 'new') return '/new'
   if (route.view === 'stack') return `${STACK_PREFIX}${encodeURIComponent(route.name)}`
   return '/'

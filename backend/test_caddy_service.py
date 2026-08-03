@@ -98,6 +98,46 @@ def test_sync_skips_request_when_caddy_disabled() -> None:
         urlopen.assert_not_called()
 
 
+def test_sync_success_records_ok_status() -> None:
+    svc = CaddyService(admin_url="http://caddy:2019")
+    with patch("caddy_service.config_service.load", return_value={"caddy_enabled": True}), \
+         patch("caddy_service.urllib.request.urlopen"):
+        svc.sync([])
+    status = svc.status()
+    assert status["ok"] is True
+    assert status["error"] is None
+    assert "at" in status
+
+
+def test_sync_failure_records_error_status() -> None:
+    svc = CaddyService(admin_url="http://caddy:2019")
+    with patch("caddy_service.config_service.load", return_value={"caddy_enabled": True}), \
+         patch("caddy_service.urllib.request.urlopen", side_effect=OSError("no route to host")):
+        svc.sync([])
+    status = svc.status()
+    assert status["ok"] is False
+    assert status["error"] == "no route to host"
+
+
+def test_build_config_appends_valid_extra_routes_after_generated_routes() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 80}, services=["web"])]
+    extra = '[{"match": [{"host": ["extra.home.arpa"]}], "handle": []}]'
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks, extra_routes_json=extra)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert len(routes) == 2
+    assert routes[0]["match"] == [{"host": ["app.home.arpa"]}]
+    assert routes[1]["match"] == [{"host": ["extra.home.arpa"]}]
+
+
+def test_build_config_skips_malformed_extra_routes_without_raising() -> None:
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([], extra_routes_json="not json")
+    assert cfg["apps"]["http"]["servers"]["litethaus"]["routes"] == []
+
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([], extra_routes_json='{"not": "a list"}')
+    assert cfg["apps"]["http"]["servers"]["litethaus"]["routes"] == []
+
+
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
     test_build_config_prefers_explicit_service_over_first_service()
@@ -108,4 +148,8 @@ if __name__ == "__main__":
     test_build_config_acme_https_with_cloudflare_token_adds_dns_challenge()
     test_build_config_acme_https_with_wildcard_domain_uses_single_wildcard_subject()
     test_sync_skips_request_when_caddy_disabled()
+    test_sync_success_records_ok_status()
+    test_sync_failure_records_error_status()
+    test_build_config_appends_valid_extra_routes_after_generated_routes()
+    test_build_config_skips_malformed_extra_routes_without_raising()
     print("ok")
