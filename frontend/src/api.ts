@@ -134,6 +134,8 @@ export interface Config {
   cloudflare_api_token: string
   wildcard_domain: string
   caddy_extra_routes_json: string
+  caddy_access_log_enabled: boolean
+  caddy_container_name: string
   theme: string
   webhook_url: string
   [key: string]: unknown
@@ -218,4 +220,31 @@ export async function fetchCaddyConfig(): Promise<Record<string, unknown>> {
 export async function fetchCaddyLive(): Promise<Record<string, unknown>> {
   const res = await fetch('/api/caddy/live')
   return unwrap(res, 'Caddy unreachable')
+}
+
+export interface CaddyUpstream {
+  address: string
+  num_requests: number
+  fails: number
+}
+
+export async function fetchCaddyUpstreams(): Promise<CaddyUpstream[]> {
+  const res = await fetch('/api/caddy/upstreams')
+  return unwrap(res, 'failed to load route health')
+}
+
+export interface CaddyCertificate {
+  domains: string[]
+  issuer: string
+  expires_at: string
+}
+
+export async function fetchCaddyCertificates(): Promise<CaddyCertificate[]> {
+  const res = await fetch('/api/caddy/certificates')
+  return unwrap(res, 'failed to load certificates')
+}
+
+export function caddyLogsSocketUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/api/caddy/logs`
 }
