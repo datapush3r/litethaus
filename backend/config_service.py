@@ -72,6 +72,13 @@ wildcard_domain: ""
 # than breaking the sync.
 caddy_extra_routes_json: ""
 
+# Override for which container is "the" Caddy container, used by the TLS
+# certificate tracker and access log viewer. Leave blank to auto-resolve via
+# the "com.docker.compose.service=caddy" label Compose always sets (works
+# regardless of an explicit container_name: override) - only set this if
+# Caddy runs outside litethaus's own Compose project.
+caddy_container_name: ""
+
 # UI theme: "light", "dark", or "system"
 theme: system
 

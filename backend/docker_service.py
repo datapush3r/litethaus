@@ -13,6 +13,7 @@ from config_service import ConfigService, config_service as _default_config_serv
 from stacks_service import Stack
 
 BAD_HEALTH_STATES = {"unhealthy", "restarting"}
+CADDY_SERVICE_LABEL = "com.docker.compose.service=caddy"
 
 
 class DockerService:
@@ -108,6 +109,32 @@ class DockerService:
             if c.name == container_name:
                 return c
         return None
+
+    def find_caddy_container(self) -> Any | None:
+        # Caddy isn't a scanned "stack" (it's not under stacks_dir), so it has
+        # no project label to filter by the way container_details() does.
+        # Compose always sets com.docker.compose.service=caddy regardless of
+        # an explicit container_name: override, so that's the reliable
+        # zero-config match; caddy_container_name in config.yaml is only for
+        # the rare case Caddy runs outside litethaus's own Compose project.
+        override = self._config.load().get("caddy_container_name") or ""
+        if override:
+            try:
+                return self.client.containers.get(override)
+            except NotFound:
+                return None
+        containers = self.client.containers.list(filters={"label": CADDY_SERVICE_LABEL})
+        return containers[0] if containers else None
+
+    def exec_run(self, container_name: str, cmd: list[str]) -> tuple[int, bytes]:
+        # One-off non-interactive exec via docker-py's high-level exec_run -
+        # a genuinely different code path from exec_shell()'s CLI+pty socket
+        # workaround above (that EOF bug was specific to the low-level
+        # client.api.exec_start(..., socket=True) hijack; exec_run() doesn't
+        # use it).
+        container = self.client.containers.get(container_name)
+        result = container.exec_run(cmd)
+        return result.exit_code, result.output
 
     def exec_shell(self, container_name: str) -> tuple[int, subprocess.Popen]:
         # Shells out to the `docker` CLI over a real pty, same approach as
