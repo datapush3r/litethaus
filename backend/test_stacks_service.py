@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
-from stacks_service import StackService, _icon_candidates, _image_basename
+from stacks_service import StackService, _container_port_from_entry, _detect_port, _icon_candidates, _image_basename
 
 # None of these tests exercise icon-guessing itself, so auto-icon is patched
 # off throughout to keep them offline and deterministic (real guessing would
@@ -308,6 +308,53 @@ def test_scan_migrates_embedded_x_litethaus_to_sidecar_and_preserves_compose_com
         assert compose_text.startswith("# a comment worth keeping\n")
 
 
+def test_container_port_from_entry_handles_all_compose_port_syntaxes() -> None:
+    assert _container_port_from_entry("8080:80") == 80
+    assert _container_port_from_entry("80") == 80
+    assert _container_port_from_entry("80/tcp") == 80
+    assert _container_port_from_entry("8080:80/udp") == 80
+    assert _container_port_from_entry(80) == 80
+    assert _container_port_from_entry({"target": 80, "published": 8080}) == 80
+    assert _container_port_from_entry({"published": 8080}) is None
+    assert _container_port_from_entry("not-a-port") is None
+
+
+def test_detect_port_prefers_ports_over_expose_and_picks_lowest() -> None:
+    assert _detect_port({"ports": ["8080:8080", "8443:443"]}) == 443
+    assert _detect_port({"expose": ["9000", "80"]}) == 80
+    # ports: present (even if higher) wins over expose: entirely
+    assert _detect_port({"ports": ["8080:9000"], "expose": ["80"]}) == 9000
+    assert _detect_port({}) is None
+    assert _detect_port({"network_mode": "host"}) is None
+
+
+def test_detect_service_metadata_reports_per_service_port_and_suggested_name() -> None:
+    svc = StackService(stacks_dir=Path("/tmp"))
+
+    single = svc.detect_service_metadata(
+        "name: plex-stack\nservices:\n  plex:\n    image: plex\n    ports: ['32400:32400']\n"
+    )
+    assert single == {"suggested_name": "plex-stack", "services": [{"name": "plex", "port": 32400}]}
+
+    # no top-level name, exactly one service -> falls back to the service key
+    sole_service = svc.detect_service_metadata("services:\n  plex:\n    image: plex\n    expose: ['32400']\n")
+    assert sole_service["suggested_name"] == "plex"
+
+    # host networking, no ports/expose -> undetectable, not a silent guess
+    host_networked = svc.detect_service_metadata("services:\n  plex:\n    image: plex\n    network_mode: host\n")
+    assert host_networked["services"] == [{"name": "plex", "port": None}]
+
+    # multiple services and no top-level name -> ambiguous, never auto-picked
+    multi = svc.detect_service_metadata(
+        "services:\n  app:\n    ports: ['8080:80']\n  db:\n    image: postgres\n"
+    )
+    assert multi["suggested_name"] is None
+    assert multi["services"] == [{"name": "app", "port": 80}, {"name": "db", "port": None}]
+
+    invalid = svc.detect_service_metadata("services: [this is not: valid: yaml")
+    assert invalid == {"suggested_name": None, "services": []}
+
+
 def test_watch_paths_covers_stacks_dir_and_each_stack_dir_only() -> None:
     # Must stay bounded to stacks_dir plus its immediate stack subdirectories -
     # never recurse into a stack's own data/media/db subfolders (that's what
@@ -353,6 +400,9 @@ if __name__ == "__main__":
     test_scan_backfills_icon_for_existing_iconless_stack()
     test_scan_does_not_overwrite_explicit_empty_icon()
     test_scan_migrates_embedded_x_litethaus_to_sidecar_and_preserves_compose_comments()
+    test_container_port_from_entry_handles_all_compose_port_syntaxes()
+    test_detect_port_prefers_ports_over_expose_and_picks_lowest()
+    test_detect_service_metadata_reports_per_service_port_and_suggested_name()
     test_watch_paths_covers_stacks_dir_and_each_stack_dir_only()
     test_restart_watcher_signals_the_current_stop_event_when_armed()
     print("ok")

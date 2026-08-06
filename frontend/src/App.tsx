@@ -21,7 +21,7 @@ import { AuthScreen } from './components/AuthScreen'
 import { CaddyPage } from './components/CaddyPage'
 import { StackCard } from './components/StackCard'
 import { StackDetail } from './components/StackDetail'
-import { StackEditor } from './components/StackEditor'
+import { StackEditor, type StackEditorMetadata } from './components/StackEditor'
 import { SettingsPage } from './components/SettingsPage'
 import { Sidebar } from './components/Sidebar'
 import { parseRoute, routePath, type Route } from './routing'
@@ -140,8 +140,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     await refreshStatuses(list)
   }, [refreshStatuses])
 
-  async function handleCreate(name: string, content: string) {
+  async function handleCreate(name: string, content: string, metadata: StackEditorMetadata) {
     await createStack(name, content)
+    if (metadata.domain || metadata.port != null || metadata.service) {
+      await updateStackMetadata(name, metadata)
+    }
     await refreshStacks()
     navigate({ view: 'stack', name })
   }

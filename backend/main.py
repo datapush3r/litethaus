@@ -216,6 +216,11 @@ def create_stack(body: dict[str, Any]) -> dict[str, Any]:
     return asdict(stack)
 
 
+@app.post("/stacks/detect")
+def detect_stack_metadata(body: dict[str, Any]) -> dict[str, Any]:
+    return stack_service.detect_service_metadata(str(body.get("content", "")))
+
+
 @app.get("/stacks/{name}/raw")
 def get_stack_raw(name: str, file: str | None = None) -> dict[str, str]:
     _get_stack(name)

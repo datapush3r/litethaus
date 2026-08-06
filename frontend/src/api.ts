@@ -78,6 +78,20 @@ export async function createStack(name: string, content: string): Promise<Stack>
   return unwrap<Stack>(res, 'failed to create stack')
 }
 
+export interface DetectedMetadata {
+  suggested_name: string | null
+  services: { name: string; port: number | null }[]
+}
+
+export async function detectStackMetadata(content: string): Promise<DetectedMetadata> {
+  const res = await fetch('/api/stacks/detect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  return unwrap<DetectedMetadata>(res, 'failed to analyze compose file')
+}
+
 export async function updateStackRaw(name: string, content: string, file?: string): Promise<Stack> {
   const res = await fetch(`/api/stacks/${name}/raw`, {
     method: 'PUT',

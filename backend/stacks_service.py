@@ -69,6 +69,28 @@ def _icon_candidates(name: str, data: dict[str, Any]) -> list[str]:
     return candidates
 
 
+def _container_port_from_entry(entry: Any) -> int | None:
+    # Long syntax: {target: 80, published: 8080, protocol: tcp} -> target.
+    # Short syntax: "8080:80" (host:container), "80" (container only, random
+    # host port), "80/tcp", or a bare int -> the container-side port either way.
+    if isinstance(entry, dict):
+        target = entry.get("target")
+        return int(target) if target is not None else None
+    text = str(entry).split("/", 1)[0].rsplit(":", 1)[-1]
+    return int(text) if text.isdigit() else None
+
+
+def _detect_port(service: dict[str, Any]) -> int | None:
+    # ports: reflects what's actually host-facing, so it's the higher-
+    # confidence signal; expose: (no host mapping) is the fallback. Lowest
+    # container port wins when either declares more than one.
+    for key in ("ports", "expose"):
+        candidates = [p for p in (_container_port_from_entry(e) for e in service.get(key) or []) if p is not None]
+        if candidates:
+            return min(candidates)
+    return None
+
+
 @dataclass
 class Stack:
     name: str
@@ -284,6 +306,20 @@ class StackService:
         # stacks go through - no special-casing needed here.
         self.scan()
         return self._require(name)
+
+    def detect_service_metadata(self, content: str) -> dict[str, Any]:
+        # Best-effort preview for the New Stack wizard - never raises.
+        # Invalid YAML just yields an empty result; the frontend's own
+        # yamlLinter already surfaces syntax errors inline, so this endpoint
+        # doesn't need to duplicate that.
+        try:
+            data = _yaml_load(content) or {}
+        except Exception:
+            return {"suggested_name": None, "services": []}
+        services = data.get("services") or {}
+        service_list = [{"name": svc_name, "port": _detect_port(svc or {})} for svc_name, svc in services.items()]
+        suggested_name = data.get("name") or (service_list[0]["name"] if len(service_list) == 1 else None)
+        return {"suggested_name": suggested_name, "services": service_list}
 
     def delete_stack(self, name: str) -> None:
         shutil.rmtree(Path(self._require(name).path).parent)
