@@ -10,7 +10,10 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://backend:8000',
+        // Defaults to the dev-compose backend service; override to point
+        // this dev server at any other running backend, e.g.
+        // VITE_API_PROXY_TARGET=http://localhost:8000 npm run dev
+        target: process.env.VITE_API_PROXY_TARGET || 'http://backend:8000',
         changeOrigin: true,
         ws: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
