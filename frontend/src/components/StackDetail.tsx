@@ -3,11 +3,13 @@ import { AlertTriangle, ExternalLink } from 'lucide-react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
   deleteStack,
+  fetchCaddyCertificates,
   fetchStackRaw,
   logsSocketUrl,
   stackUrl,
   updateStackMetadata,
   updateStackRaw,
+  type CaddyCertificate,
   type ContainerInfo,
   type Stack,
   type StackState,
@@ -35,7 +37,7 @@ interface StackDetailProps {
   onDeleted: () => void
 }
 
-const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon'])
+const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon', 'lan_only'])
 
 const H_HANDLE = 'mx-1 w-1 shrink-0 cursor-col-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
 const V_HANDLE = 'my-1 h-1 shrink-0 cursor-row-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
@@ -68,12 +70,14 @@ export function StackDetail({
   const [portDraft, setPortDraft] = useState('')
   const [metaError, setMetaError] = useState<string | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
+  const [certs, setCerts] = useState<CaddyCertificate[]>([])
 
   const meta = stack.x_litethaus
   const domain = typeof meta.domain === 'string' ? meta.domain : null
   const port = meta.port != null ? String(meta.port) : null
   const icon = typeof meta.icon === 'string' ? meta.icon : ''
   const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? null)
+  const lanOnly = Boolean(meta.lan_only)
   const extraFields = Object.entries(meta).filter(([key]) => !KNOWN_FIELDS.has(key))
 
   const primaryContainer = containers.find((c) => c.state === 'running')?.name ?? containers[0]?.name ?? null
@@ -113,7 +117,19 @@ export function StackDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stack.name])
 
-  async function saveMetadata(patch: { icon?: string | null; port?: number | null; domain?: string | null }) {
+  useEffect(() => {
+    fetchCaddyCertificates()
+      .then(setCerts)
+      .catch(() => setCerts([]))
+  }, [])
+
+  async function saveMetadata(patch: {
+    icon?: string | null
+    port?: number | null
+    domain?: string | null
+    service?: string | null
+    lan_only?: boolean | null
+  }) {
     setMetaError(null)
     try {
       await updateStackMetadata(stack.name, patch)
@@ -308,12 +324,47 @@ export function StackDetail({
           </div>
           <div>
             <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Proxied service</dt>
-            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{service ?? '—'}</dd>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
+              <select
+                value={service ?? ''}
+                onChange={(e) => saveMetadata({ service: e.target.value || null })}
+                className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 outline-none hover:border-neutral-300 focus:border-neutral-400 dark:hover:border-neutral-700 dark:focus:border-neutral-600"
+              >
+                {stack.services.map((svc) => (
+                  <option key={svc} value={svc}>
+                    {svc}
+                  </option>
+                ))}
+              </select>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">LAN only</dt>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
+              <input
+                type="checkbox"
+                checked={lanOnly}
+                onChange={(e) => saveMetadata({ lan_only: e.target.checked || null })}
+                title="Restrict to private/LAN IP ranges only"
+              />
+            </dd>
           </div>
           <div>
             <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Services</dt>
             <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{stack.services.join(', ') || '—'}</dd>
           </div>
+          {(() => {
+            const cert = domain ? certs.find((c) => c.domains.includes(domain)) : undefined
+            if (!domain || !cert) return null
+            return (
+              <div>
+                <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Cert expires</dt>
+                <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
+                  {new Date(cert.expires_at).toLocaleDateString()}
+                </dd>
+              </div>
+            )
+          })()}
           {extraFields.map(([key, value]) => (
             <div key={key}>
               <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">{key}</dt>
