@@ -74,6 +74,7 @@ class CaddyService:
                         {
                             "handler": "reverse_proxy",
                             "upstreams": [{"dial": f"{upstream_service}:{port}"}],
+                            "health_checks": {"passive": {"fail_duration": "30s"}},
                         }
                     ],
                 }

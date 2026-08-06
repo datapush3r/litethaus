@@ -30,6 +30,24 @@ def _make_cert_pem(domain: str, issuer_cn: str, days_until_expiry: int) -> bytes
     return cert.public_bytes(serialization.Encoding.PEM)
 
 
+def _make_ca_cert_pem(issuer_cn: str, days_until_expiry: int) -> bytes:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, issuer_cn)])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=days_until_expiry))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .sign(key, hashes.SHA256())
+    )
+    return cert.public_bytes(serialization.Encoding.PEM)
+
+
 def test_parse_certificates_extracts_domain_issuer_and_expiry() -> None:
     pem = _make_cert_pem("app.home.arpa", "litethaus internal CA", 30)
     certs = parse_certificates(pem)
@@ -56,6 +74,15 @@ def test_parse_certificates_returns_empty_list_for_empty_input() -> None:
     assert parse_certificates(b"") == []
 
 
+def test_parse_certificates_skips_ca_certs_in_chain() -> None:
+    ca_pem = _make_ca_cert_pem("Intermediate CA", 3650)
+    leaf_pem = _make_cert_pem("app.example.com", "Intermediate CA", 90)
+    certs = parse_certificates(ca_pem + leaf_pem)
+
+    assert len(certs) == 1
+    assert certs[0]["domains"] == ["app.example.com"]
+
+
 def test_list_certificates_returns_empty_when_no_caddy_container() -> None:
     with patch("cert_service.docker_service.find_caddy_container", return_value=None):
         assert cert_service.list_certificates() == []
@@ -79,6 +106,7 @@ if __name__ == "__main__":
     test_parse_certificates_handles_multiple_concatenated_pem_blocks()
     test_parse_certificates_skips_unparseable_blocks_without_raising()
     test_parse_certificates_returns_empty_list_for_empty_input()
+    test_parse_certificates_skips_ca_certs_in_chain()
     test_list_certificates_returns_empty_when_no_caddy_container()
     test_list_certificates_execs_find_and_parses_output()
     print("ok")

@@ -154,6 +154,20 @@ def test_find_caddy_container_uses_override_name_when_configured() -> None:
     assert containers.get_calls == ["my-caddy"]
 
 
+def test_find_caddy_container_picks_deterministically_by_name_when_multiple_match() -> None:
+    svc = _svc()
+    # Passed in reverse-alphabetical order so a pass here proves sorting
+    # actually happened, not just "whatever was first in the list".
+    later = SimpleNamespace(name="zzz-caddy-2")
+    earlier = SimpleNamespace(name="aaa-caddy-1")
+    containers = _RecordingContainers(list_result=[later, earlier])
+    svc._client = SimpleNamespace(containers=containers)
+
+    result = svc.find_caddy_container()
+
+    assert result is earlier
+
+
 def test_find_caddy_container_returns_none_when_not_found() -> None:
     svc = _svc()
     svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[]))
@@ -178,6 +192,7 @@ if __name__ == "__main__":
     test_summarize_health_prefers_restarting_over_unhealthy()
     test_summarize_health_unhealthy_and_healthy_and_unknown()
     test_find_caddy_container_resolves_by_compose_service_label()
+    test_find_caddy_container_picks_deterministically_by_name_when_multiple_match()
     test_find_caddy_container_uses_override_name_when_configured()
     test_find_caddy_container_returns_none_when_not_found()
     test_exec_run_returns_exit_code_and_output()

@@ -18,6 +18,14 @@ def test_build_config_only_includes_routable_stacks() -> None:
     assert routes[0]["handle"][0]["upstreams"] == [{"dial": "web:8080"}]
 
 
+def test_build_config_adds_passive_health_checks_to_generated_routes() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 8080}, services=["web"])]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert routes[0]["handle"][0]["health_checks"] == {"passive": {"fail_duration": "30s"}}
+
+
 def test_build_config_adds_remote_ip_restriction_when_lan_only() -> None:
     stacks = [
         Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 80, "lan_only": True}, services=["web"]),
@@ -202,6 +210,7 @@ def test_build_config_omits_logs_key_by_default() -> None:
 
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
+    test_build_config_adds_passive_health_checks_to_generated_routes()
     test_build_config_adds_trailing_wildcard_catchall_when_acme_and_wildcard_domain()
     test_build_config_skips_wildcard_catchall_without_wildcard_domain_or_acme()
     test_build_config_restricts_server_to_http1_only()

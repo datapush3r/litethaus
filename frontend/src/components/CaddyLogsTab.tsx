@@ -6,14 +6,20 @@ export function CaddyLogsTab() {
   const [lines, setLines] = useState<string[]>([])
   const [enabled, setEnabled] = useState(false)
   const [toggling, setToggling] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchConfig().then((cfg) => setEnabled(Boolean(cfg.caddy_access_log_enabled)))
   }, [])
 
   useEffect(() => {
+    setError(null)
     const ws = new WebSocket(caddyLogsSocketUrl())
     ws.onmessage = (event) => setLines((prev) => [...prev, event.data])
+    ws.onclose = (event) => {
+      if (event.code === 4004) setError('Caddy container not found — is the bundled Caddy running?')
+      else if (event.code === 4401) setError('Session expired — reload the page')
+    }
     return () => ws.close()
   }, [])
 
@@ -36,6 +42,7 @@ export function CaddyLogsTab() {
           Log every request
         </label>
       </div>
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!enabled && (
         <p className="text-xs text-neutral-400 dark:text-neutral-500">
           Access logging is off - Caddy's own error/startup log still streams below, but requests won't be logged

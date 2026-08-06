@@ -41,7 +41,7 @@ export function CaddyRoutesTab({ stacks, onStacksChanged }: CaddyRoutesTabProps)
               <th className="px-3 py-2">Port</th>
               <th className="px-3 py-2">LAN only</th>
               <th className="px-3 py-2">Health</th>
-              <th className="px-3 py-2">Requests</th>
+              <th className="px-3 py-2">Active</th>
             </tr>
           </thead>
           <tbody>

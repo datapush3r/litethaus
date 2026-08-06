@@ -21,7 +21,7 @@ class HealthService:
     def __init__(self) -> None:
         self._last_health: dict[str, str] = {}
         self._stop_event: threading.Event | None = None
-        self._last_cert_check: float = 0.0
+        self._last_cert_check: float = float("-inf")
         self._alerted_certs: set[str] = set()
 
     def check_once(self) -> None:

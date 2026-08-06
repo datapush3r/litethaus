@@ -7,7 +7,7 @@ from health_service import HealthService
 
 def _svc() -> HealthService:
     svc = HealthService()
-    svc._last_cert_check = 0.0
+    svc._last_cert_check = float("-inf")
     return svc
 
 

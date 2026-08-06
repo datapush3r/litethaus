@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import pty
 import subprocess
@@ -11,6 +12,8 @@ from docker.errors import NotFound
 
 from config_service import ConfigService, config_service as _default_config_service
 from stacks_service import Stack
+
+logger = logging.getLogger(__name__)
 
 BAD_HEALTH_STATES = {"unhealthy", "restarting"}
 CADDY_SERVICE_LABEL = "com.docker.compose.service=caddy"
@@ -134,7 +137,19 @@ class DockerService:
             except NotFound:
                 return None
         containers = self.client.containers.list(filters={"label": CADDY_SERVICE_LABEL})
-        return containers[0] if containers else None
+        if not containers:
+            return None
+        if len(containers) > 1:
+            # ponytail: host-wide label match isn't scoped to litethaus's own
+            # compose project, so >1 hit is possible if another stack names a
+            # service "caddy". Deterministic pick + a log line to grep is the
+            # cheap mitigation; scoping the label query properly is the real fix.
+            logger.warning(
+                "Multiple containers matched %s: %s - picking alphabetically first",
+                CADDY_SERVICE_LABEL,
+                sorted(c.name for c in containers),
+            )
+        return sorted(containers, key=lambda c: c.name)[0]
 
     def exec_run(self, container_name: str, cmd: list[str]) -> tuple[int, bytes]:
         # One-off non-interactive exec via docker-py's high-level exec_run -
