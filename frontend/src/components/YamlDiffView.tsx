@@ -3,7 +3,7 @@ import { yaml } from '@codemirror/lang-yaml'
 import { unifiedMergeView } from '@codemirror/merge'
 import { EditorView } from '@codemirror/view'
 import { useIsDarkMode } from '../useIsDarkMode'
-import { yamlDarkTheme, yamlLightTheme } from '../yamlTheme'
+import { editorDarkTheme, editorLightTheme } from '../editorTheme'
 
 interface YamlDiffViewProps {
   original: string
@@ -18,7 +18,7 @@ export function YamlDiffView({ original, modified, className }: YamlDiffViewProp
     <CodeMirror
       value={modified}
       editable={false}
-      theme={isDark ? yamlDarkTheme : yamlLightTheme}
+      theme={isDark ? editorDarkTheme : editorLightTheme}
       extensions={[yaml(), unifiedMergeView({ original, mergeControls: false }), EditorView.editable.of(false)]}
       height="100%"
       className={className}

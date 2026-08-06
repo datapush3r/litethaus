@@ -12,7 +12,19 @@ import {
 import { CaddyCertificatesTab } from './CaddyCertificatesTab'
 import { CaddyLogsTab } from './CaddyLogsTab'
 import { CaddyRoutesTab } from './CaddyRoutesTab'
+import { JsonEditor } from './JsonEditor'
 import { TabBar } from './TabBar'
+
+// Config is stored as compact JSON; reformat it for humans to read/edit.
+// Falls back to the raw string on parse failure - errors show up in the editor's lint gutter instead.
+function prettify(raw: string): string {
+  if (!raw.trim()) return raw
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+}
 
 interface CaddyPageProps {
   stacks: Stack[]
@@ -55,7 +67,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
   useEffect(() => {
     loadStatus()
     loadConfig()
-    fetchConfig().then((cfg) => setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? '')))
+    fetchConfig().then((cfg) => setExtraRoutesJson(prettify(String(cfg.caddy_extra_routes_json ?? ''))))
   }, [])
 
   function loadLive() {
@@ -158,9 +170,11 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
             </div>
             {configError && <p className="text-sm text-red-600 dark:text-red-400">{configError}</p>}
             {generatedConfig && (
-              <pre className="max-h-96 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                {JSON.stringify(generatedConfig, null, 2)}
-              </pre>
+              <JsonEditor
+                value={JSON.stringify(generatedConfig, null, 2)}
+                readOnly
+                className="rounded border border-neutral-200 dark:border-neutral-800"
+              />
             )}
 
             <button
@@ -174,9 +188,11 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
                 {liveLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500">loading…</p>}
                 {liveError && <p className="text-sm text-red-600 dark:text-red-400">{liveError}</p>}
                 {liveConfig && (
-                  <pre className="max-h-96 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                    {JSON.stringify(liveConfig, null, 2)}
-                  </pre>
+                  <JsonEditor
+                    value={JSON.stringify(liveConfig, null, 2)}
+                    readOnly
+                    className="rounded border border-neutral-200 dark:border-neutral-800"
+                  />
                 )}
               </div>
             )}
@@ -194,12 +210,12 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
             Raw Caddy route objects (JSON array), appended after the routes generated in the Routes tab. Leave blank
             to skip. Invalid JSON is ignored rather than breaking sync.
           </p>
-          <textarea
+          <JsonEditor
             value={extraRoutesJson}
-            onChange={(e) => setExtraRoutesJson(e.target.value)}
-            rows={6}
-            placeholder='[{"match": [{"host": ["extra.example.com"]}], "handle": [...]}]'
-            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            onChange={setExtraRoutesJson}
+            minHeight="8rem"
+            maxHeight="20rem"
+            className="w-full rounded border border-neutral-300 dark:border-neutral-700"
           />
           <div className="mt-2 flex items-center gap-3">
             <button
