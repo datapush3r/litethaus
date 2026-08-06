@@ -120,7 +120,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
+    <div className="flex w-full flex-col gap-4">
       <TabBar items={TABS} active={tab} onSelect={setTab} />
 
       {tab === 'Overview' && (
@@ -214,7 +214,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
             value={extraRoutesJson}
             onChange={setExtraRoutesJson}
             minHeight="8rem"
-            maxHeight="20rem"
+            maxHeight="40vh"
             className="w-full rounded border border-neutral-300 dark:border-neutral-700"
           />
           <div className="mt-2 flex items-center gap-3">

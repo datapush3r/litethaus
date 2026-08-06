@@ -18,7 +18,7 @@ interface JsonEditorProps {
 
 // Syntax-highlighted JSON, editable or read-only. Read-only mode (no
 // onChange) drops the lint gutter - nothing to fix if you can't type.
-export function JsonEditor({ value, onChange, readOnly, maxHeight = '24rem', minHeight, className }: JsonEditorProps) {
+export function JsonEditor({ value, onChange, readOnly, maxHeight = '50vh', minHeight, className }: JsonEditorProps) {
   const isDark = useIsDarkMode()
   const editable = !readOnly && onChange !== undefined
 

@@ -34,7 +34,7 @@ export function CaddyLogsTab() {
   }
 
   return (
-    <div className="flex h-96 flex-col gap-2">
+    <div className="flex h-[60vh] min-h-64 flex-col gap-2">
       <div className="flex items-center justify-between">
         <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Access logs</h2>
         <label className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
