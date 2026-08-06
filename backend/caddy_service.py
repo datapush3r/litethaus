@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from config_service import config_service
+from docker_service import docker_service
 from stacks_service import Stack
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,16 @@ class CaddyService:
         # it for the Routes tab's live-health columns.
         with urllib.request.urlopen(f"{self.admin_url}/reverse_proxy/upstreams", timeout=5) as resp:
             return json.load(resp)
+
+    def version(self) -> str | None:
+        container = docker_service.find_caddy_container()
+        if container is None:
+            return None
+        exit_code, output = docker_service.exec_run(container.name, ["caddy", "version"])
+        if exit_code != 0:
+            logger.warning("caddy version inside %s exited %s: %r", container.name, exit_code, output[:200])
+            return None
+        return output.decode(errors="replace").strip()
 
     def build_config(
         self,

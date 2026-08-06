@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 from caddy_service import CaddyService
@@ -198,6 +199,30 @@ def test_fetch_upstreams_returns_parsed_json() -> None:
     assert result == [{"address": "web:8080", "num_requests": 5, "fails": 0}]
 
 
+def test_version_returns_stripped_output_when_container_found() -> None:
+    fake_container = SimpleNamespace(name="litethaus-caddy-1")
+    with patch("caddy_service.docker_service.find_caddy_container", return_value=fake_container), \
+         patch("caddy_service.docker_service.exec_run", return_value=(0, b"v2.8.4 h1:abc123\n")):
+        result = CaddyService(admin_url="http://caddy:2019").version()
+    assert result == "v2.8.4 h1:abc123"
+
+
+def test_version_returns_none_when_exec_fails() -> None:
+    fake_container = SimpleNamespace(name="litethaus-caddy-1")
+    with patch("caddy_service.docker_service.find_caddy_container", return_value=fake_container), \
+         patch("caddy_service.docker_service.exec_run", return_value=(1, b"exec failed\n")):
+        result = CaddyService(admin_url="http://caddy:2019").version()
+    assert result is None
+
+
+def test_version_returns_none_when_container_not_found() -> None:
+    with patch("caddy_service.docker_service.find_caddy_container", return_value=None), \
+         patch("caddy_service.docker_service.exec_run") as exec_run:
+        result = CaddyService(admin_url="http://caddy:2019").version()
+    assert result is None
+    exec_run.assert_not_called()
+
+
 def test_build_config_adds_logs_key_when_access_log_enabled() -> None:
     cfg = CaddyService(admin_url="http://caddy:2019").build_config([], access_log_enabled=True)
     assert cfg["apps"]["http"]["servers"]["litethaus"]["logs"] == {}
@@ -228,6 +253,9 @@ if __name__ == "__main__":
     test_build_config_appends_valid_extra_routes_after_generated_routes()
     test_build_config_skips_malformed_extra_routes_without_raising()
     test_fetch_upstreams_returns_parsed_json()
+    test_version_returns_stripped_output_when_container_found()
+    test_version_returns_none_when_exec_fails()
+    test_version_returns_none_when_container_not_found()
     test_build_config_adds_logs_key_when_access_log_enabled()
     test_build_config_omits_logs_key_by_default()
     print("ok")
