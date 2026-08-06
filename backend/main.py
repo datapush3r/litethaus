@@ -173,6 +173,17 @@ def caddy_status() -> dict[str, Any]:
     return caddy_service.status()
 
 
+@app.get("/caddy/version")
+def caddy_version() -> dict[str, Any]:
+    return {"version": caddy_service.version()}
+
+
+@app.post("/caddy/reload")
+def caddy_reload() -> dict[str, Any]:
+    caddy_service.sync(stack_service.list_stacks())
+    return caddy_service.status()
+
+
 @app.get("/caddy/config")
 def caddy_config() -> dict[str, Any]:
     cfg = config_service.load()
