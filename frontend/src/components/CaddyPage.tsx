@@ -71,11 +71,11 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
     setReloading(true)
     try {
       await reloadCaddy()
+      loadStatus()
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : 'failed to reload')
     } finally {
       setReloading(false)
-      loadStatus()
       loadConfig()
     }
   }
