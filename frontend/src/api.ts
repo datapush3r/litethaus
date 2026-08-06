@@ -212,6 +212,16 @@ export async function fetchCaddyStatus(): Promise<CaddyStatus> {
   return unwrap<CaddyStatus>(res, 'failed to load Caddy status')
 }
 
+export async function fetchCaddyVersion(): Promise<{ version: string | null }> {
+  const res = await fetch('/api/caddy/version')
+  return unwrap(res, 'failed to load Caddy version')
+}
+
+export async function reloadCaddy(): Promise<CaddyStatus> {
+  const res = await fetch('/api/caddy/reload', { method: 'POST' })
+  return unwrap<CaddyStatus>(res, 'failed to reload Caddy')
+}
+
 export async function fetchCaddyConfig(): Promise<Record<string, unknown>> {
   const res = await fetch('/api/caddy/config')
   return unwrap(res, 'failed to load generated Caddy config')

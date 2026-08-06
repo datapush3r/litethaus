@@ -4,7 +4,9 @@ import {
   fetchCaddyConfig,
   fetchCaddyLive,
   fetchCaddyStatus,
+  fetchCaddyVersion,
   fetchConfig,
+  reloadCaddy,
   updateConfig,
   type CaddyStatus,
   type Stack,
@@ -34,6 +36,8 @@ interface CaddyPageProps {
 export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
   const [status, setStatus] = useState<CaddyStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
+  const [version, setVersion] = useState<string | null>(null)
+  const [reloading, setReloading] = useState(false)
   const [generatedConfig, setGeneratedConfig] = useState<Record<string, unknown> | null>(null)
   const [configError, setConfigError] = useState<string | null>(null)
 
@@ -57,6 +61,25 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
       .catch((err) => setStatusError(err instanceof Error ? err.message : 'failed to load status'))
   }
 
+  function loadVersion() {
+    fetchCaddyVersion()
+      .then((res) => setVersion(res.version))
+      .catch(() => setVersion(null))
+  }
+
+  async function handleReload() {
+    setReloading(true)
+    try {
+      await reloadCaddy()
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'failed to reload')
+    } finally {
+      setReloading(false)
+      loadStatus()
+      loadConfig()
+    }
+  }
+
   function loadConfig() {
     setConfigError(null)
     fetchCaddyConfig()
@@ -66,6 +89,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
 
   useEffect(() => {
     loadStatus()
+    loadVersion()
     loadConfig()
     fetchConfig().then((cfg) => setExtraRoutesJson(prettify(String(cfg.caddy_extra_routes_json ?? ''))))
   }, [])
@@ -128,13 +152,22 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
           <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
             <div className="flex items-center justify-between">
               <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Sync status</h2>
-              <button
-                onClick={loadStatus}
-                aria-label="Refresh status"
-                className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
-              >
-                <RefreshCw size={14} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleReload}
+                  disabled={reloading}
+                  className="text-xs text-neutral-500 hover:text-neutral-800 disabled:opacity-40 dark:text-neutral-400 dark:hover:text-neutral-200"
+                >
+                  {reloading ? 'Reloading…' : 'Reload'}
+                </button>
+                <button
+                  onClick={loadStatus}
+                  aria-label="Refresh status"
+                  className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
             </div>
             {statusError && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{statusError}</p>}
             {status && (
@@ -154,6 +187,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
                 {status.at && (
                   <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(status.at).toLocaleString()}</span>
                 )}
+                {version && <span className="text-xs text-neutral-400 dark:text-neutral-500">Caddy {version}</span>}
               </div>
             )}
           </div>
