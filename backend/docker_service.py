@@ -70,17 +70,7 @@ class DockerService:
         up = subprocess.run(self._compose_cmd(stack, "up", "-d"), capture_output=True, text=True)
         return up.returncode == 0, pull.stdout + pull.stderr + up.stdout + up.stderr
 
-    async def stream_logs(self, stack: Stack, container: str | None = None) -> AsyncIterator[str]:
-        # A single container's logs are streamed directly via `docker logs`
-        # rather than `docker compose logs <service>` - the caller already
-        # resolves `container` to an actual container name (see
-        # find_container()), which docker logs takes directly with no need
-        # to also know the service name from the compose file.
-        cmd = (
-            ["docker", "logs", "-f", "--tail", "100", container]
-            if container
-            else self._compose_cmd(stack, "logs", "-f", "--no-color", "--tail", "100")
-        )
+    async def _stream_process_lines(self, cmd: list[str]) -> AsyncIterator[str]:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -95,6 +85,26 @@ class DockerService:
         finally:
             if process.returncode is None:
                 process.terminate()
+
+    async def stream_logs(self, stack: Stack, container: str | None = None) -> AsyncIterator[str]:
+        # A single container's logs are streamed directly via `docker logs`
+        # rather than `docker compose logs <service>` - the caller already
+        # resolves `container` to an actual container name (see
+        # find_container()), which docker logs takes directly with no need
+        # to also know the service name from the compose file.
+        cmd = (
+            ["docker", "logs", "-f", "--tail", "100", container]
+            if container
+            else self._compose_cmd(stack, "logs", "-f", "--no-color", "--tail", "100")
+        )
+        async for line in self._stream_process_lines(cmd):
+            yield line
+
+    async def stream_container_logs(self, container_name: str) -> AsyncIterator[str]:
+        # Same as stream_logs(container=...) above but for a container that
+        # isn't part of any litethaus-scanned stack - i.e. Caddy itself.
+        async for line in self._stream_process_lines(["docker", "logs", "-f", "--tail", "100", container_name]):
+            yield line
 
     def container_details(self, stack: Stack) -> list[dict[str, Any]]:
         containers = self.client.containers.list(

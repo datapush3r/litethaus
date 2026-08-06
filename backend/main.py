@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from auth_service import SESSION_COOKIE, SESSION_TTL_SECONDS, auth_service
 from caddy_service import caddy_service
+from cert_service import cert_service
 from config_service import config_service
 from docker_service import docker_service
 from health_service import health_service
@@ -134,6 +135,7 @@ CADDY_RELEVANT_KEYS = {
     "wildcard_domain",
     "caddy_enabled",
     "caddy_extra_routes_json",
+    "caddy_access_log_enabled",
 }
 
 
@@ -181,6 +183,7 @@ def caddy_config() -> dict[str, Any]:
         cloudflare_api_token=cfg.get("cloudflare_api_token", ""),
         wildcard_domain=cfg.get("wildcard_domain", ""),
         extra_routes_json=cfg.get("caddy_extra_routes_json", ""),
+        access_log_enabled=cfg.get("caddy_access_log_enabled", False),
     )
     return _redact_secrets(config)
 
@@ -192,6 +195,19 @@ def caddy_live() -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Caddy unreachable: {exc}")
     return _redact_secrets(config)
+
+
+@app.get("/caddy/upstreams")
+def caddy_upstreams() -> list[dict[str, Any]]:
+    try:
+        return caddy_service.fetch_upstreams()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Caddy unreachable: {exc}")
+
+
+@app.get("/caddy/certificates")
+def caddy_certificates() -> list[dict[str, Any]]:
+    return cert_service.list_certificates()
 
 
 @app.get("/stacks")
@@ -402,6 +418,43 @@ async def stack_terminal(websocket: WebSocket, name: str, container: str) -> Non
             await task
     process.terminate()
     os.close(master_fd)
+
+
+@app.websocket("/api/caddy/logs")
+async def caddy_logs(websocket: WebSocket) -> None:
+    if auth_service.enabled() and auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
+        await websocket.close(code=4401)
+        return
+
+    container = docker_service.find_caddy_container()
+    if container is None:
+        await websocket.close(code=4004)
+        return
+
+    await websocket.accept()
+
+    async def forward_logs() -> None:
+        while True:
+            async with aclosing(docker_service.stream_container_logs(container.name)) as lines:
+                async for line in lines:
+                    await websocket.send_text(line)
+            await asyncio.sleep(1)
+
+    async def watch_disconnect() -> None:
+        with suppress(WebSocketDisconnect):
+            while True:
+                await websocket.receive()
+
+    forward_task = asyncio.create_task(forward_logs())
+    disconnect_task = asyncio.create_task(watch_disconnect())
+    done, pending = await asyncio.wait({forward_task, disconnect_task}, return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+    for task in done:
+        with suppress(WebSocketDisconnect):
+            task.result()
 
 
 # Built frontend assets (backend/Dockerfile copies the Vite `dist/` build
