@@ -72,6 +72,18 @@ wildcard_domain: ""
 # than breaking the sync.
 caddy_extra_routes_json: ""
 
+# Override for which container is "the" Caddy container, used by the TLS
+# certificate tracker and access log viewer. Leave blank to auto-resolve via
+# the "com.docker.compose.service=caddy" label Compose always sets (works
+# regardless of an explicit container_name: override) - only set this if
+# Caddy runs outside litethaus's own Compose project.
+caddy_container_name: ""
+
+# Whether Caddy emits access logs (one line per request) to its own
+# container log, viewable from the Caddy page's Access Logs tab. Off by
+# default - noisy for a home reverse proxy unless you're debugging routing.
+caddy_access_log_enabled: false
+
 # UI theme: "light", "dark", or "system"
 theme: system
 

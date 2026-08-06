@@ -15,7 +15,7 @@ function syntaxStyles(dark: boolean) {
   ]
 }
 
-export const yamlLightTheme = createTheme({
+export const editorLightTheme = createTheme({
   theme: 'light',
   settings: {
     background: '#ffffff',
@@ -31,7 +31,7 @@ export const yamlLightTheme = createTheme({
   styles: syntaxStyles(false),
 })
 
-export const yamlDarkTheme = createTheme({
+export const editorDarkTheme = createTheme({
   theme: 'dark',
   settings: {
     background: '#171717', // neutral-900

@@ -1,4 +1,5 @@
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import patch, MagicMock
 
 from caddy_service import CaddyService
 from stacks_service import Stack
@@ -16,6 +17,14 @@ def test_build_config_only_includes_routable_stacks() -> None:
     assert len(routes) == 1
     assert routes[0]["match"] == [{"host": ["app.home.arpa"]}]
     assert routes[0]["handle"][0]["upstreams"] == [{"dial": "web:8080"}]
+
+
+def test_build_config_adds_passive_health_checks_to_generated_routes() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 8080}, services=["web"])]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert routes[0]["handle"][0]["health_checks"] == {"passive": {"fail_duration": "30s"}}
 
 
 def test_build_config_adds_remote_ip_restriction_when_lan_only() -> None:
@@ -180,8 +189,53 @@ def test_build_config_skips_malformed_extra_routes_without_raising() -> None:
     assert cfg["apps"]["http"]["servers"]["litethaus"]["routes"] == []
 
 
+def test_fetch_upstreams_returns_parsed_json() -> None:
+    svc = CaddyService(admin_url="http://caddy:2019")
+    payload = b'[{"address": "web:8080", "num_requests": 5, "fails": 0}]'
+    fake_resp = MagicMock()
+    fake_resp.__enter__.return_value.read.return_value = payload
+    with patch("caddy_service.urllib.request.urlopen", return_value=fake_resp):
+        result = svc.fetch_upstreams()
+    assert result == [{"address": "web:8080", "num_requests": 5, "fails": 0}]
+
+
+def test_version_returns_stripped_output_when_container_found() -> None:
+    fake_container = SimpleNamespace(name="litethaus-caddy-1")
+    with patch("caddy_service.docker_service.find_caddy_container", return_value=fake_container), \
+         patch("caddy_service.docker_service.exec_run", return_value=(0, b"v2.8.4 h1:abc123\n")):
+        result = CaddyService(admin_url="http://caddy:2019").version()
+    assert result == "v2.8.4 h1:abc123"
+
+
+def test_version_returns_none_when_exec_fails() -> None:
+    fake_container = SimpleNamespace(name="litethaus-caddy-1")
+    with patch("caddy_service.docker_service.find_caddy_container", return_value=fake_container), \
+         patch("caddy_service.docker_service.exec_run", return_value=(1, b"exec failed\n")):
+        result = CaddyService(admin_url="http://caddy:2019").version()
+    assert result is None
+
+
+def test_version_returns_none_when_container_not_found() -> None:
+    with patch("caddy_service.docker_service.find_caddy_container", return_value=None), \
+         patch("caddy_service.docker_service.exec_run") as exec_run:
+        result = CaddyService(admin_url="http://caddy:2019").version()
+    assert result is None
+    exec_run.assert_not_called()
+
+
+def test_build_config_adds_logs_key_when_access_log_enabled() -> None:
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([], access_log_enabled=True)
+    assert cfg["apps"]["http"]["servers"]["litethaus"]["logs"] == {}
+
+
+def test_build_config_omits_logs_key_by_default() -> None:
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([])
+    assert "logs" not in cfg["apps"]["http"]["servers"]["litethaus"]
+
+
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
+    test_build_config_adds_passive_health_checks_to_generated_routes()
     test_build_config_adds_trailing_wildcard_catchall_when_acme_and_wildcard_domain()
     test_build_config_skips_wildcard_catchall_without_wildcard_domain_or_acme()
     test_build_config_restricts_server_to_http1_only()
@@ -198,4 +252,10 @@ if __name__ == "__main__":
     test_sync_failure_records_error_status()
     test_build_config_appends_valid_extra_routes_after_generated_routes()
     test_build_config_skips_malformed_extra_routes_without_raising()
+    test_fetch_upstreams_returns_parsed_json()
+    test_version_returns_stripped_output_when_container_found()
+    test_version_returns_none_when_exec_fails()
+    test_version_returns_none_when_container_not_found()
+    test_build_config_adds_logs_key_when_access_log_enabled()
+    test_build_config_omits_logs_key_by_default()
     print("ok")

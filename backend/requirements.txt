@@ -3,3 +3,4 @@ uvicorn[standard]
 ruamel.yaml
 watchfiles
 docker
+cryptography

@@ -4,7 +4,7 @@ import { indentUnit } from '@codemirror/language'
 import { lintGutter } from '@codemirror/lint'
 import { useIsDarkMode } from '../useIsDarkMode'
 import { yamlLinter } from '../yamlLint'
-import { yamlDarkTheme, yamlLightTheme } from '../yamlTheme'
+import { editorDarkTheme, editorLightTheme } from '../editorTheme'
 
 interface YamlEditorProps {
   value: string
@@ -19,7 +19,7 @@ export function YamlEditor({ value, onChange, className }: YamlEditorProps) {
     <CodeMirror
       value={value}
       onChange={onChange}
-      theme={isDark ? yamlDarkTheme : yamlLightTheme}
+      theme={isDark ? editorDarkTheme : editorLightTheme}
       extensions={[yaml(), indentUnit.of('  '), lintGutter(), yamlLinter]}
       height="100%"
       className={className}
