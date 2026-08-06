@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from caddy_service import CaddyService
 from stacks_service import Stack
@@ -180,6 +180,26 @@ def test_build_config_skips_malformed_extra_routes_without_raising() -> None:
     assert cfg["apps"]["http"]["servers"]["litethaus"]["routes"] == []
 
 
+def test_fetch_upstreams_returns_parsed_json() -> None:
+    svc = CaddyService(admin_url="http://caddy:2019")
+    payload = b'[{"address": "web:8080", "num_requests": 5, "fails": 0}]'
+    fake_resp = MagicMock()
+    fake_resp.__enter__.return_value.read.return_value = payload
+    with patch("caddy_service.urllib.request.urlopen", return_value=fake_resp):
+        result = svc.fetch_upstreams()
+    assert result == [{"address": "web:8080", "num_requests": 5, "fails": 0}]
+
+
+def test_build_config_adds_logs_key_when_access_log_enabled() -> None:
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([], access_log_enabled=True)
+    assert cfg["apps"]["http"]["servers"]["litethaus"]["logs"] == {}
+
+
+def test_build_config_omits_logs_key_by_default() -> None:
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config([])
+    assert "logs" not in cfg["apps"]["http"]["servers"]["litethaus"]
+
+
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
     test_build_config_adds_trailing_wildcard_catchall_when_acme_and_wildcard_domain()
@@ -198,4 +218,7 @@ if __name__ == "__main__":
     test_sync_failure_records_error_status()
     test_build_config_appends_valid_extra_routes_after_generated_routes()
     test_build_config_skips_malformed_extra_routes_without_raising()
+    test_fetch_upstreams_returns_parsed_json()
+    test_build_config_adds_logs_key_when_access_log_enabled()
+    test_build_config_omits_logs_key_by_default()
     print("ok")

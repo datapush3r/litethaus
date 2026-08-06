@@ -35,6 +35,13 @@ class CaddyService:
         with urllib.request.urlopen(f"{self.admin_url}/config/", timeout=5) as resp:
             return json.load(resp)
 
+    def fetch_upstreams(self) -> list[dict[str, Any]]:
+        # Caddy's reverse_proxy handler always tracks passive upstream health
+        # (request/fail counts) with zero extra config - this just surfaces
+        # it for the Routes tab's live-health columns.
+        with urllib.request.urlopen(f"{self.admin_url}/reverse_proxy/upstreams", timeout=5) as resp:
+            return json.load(resp)
+
     def build_config(
         self,
         stacks: list[Stack],
@@ -43,6 +50,7 @@ class CaddyService:
         cloudflare_api_token: str = "",
         wildcard_domain: str = "",
         extra_routes_json: str = "",
+        access_log_enabled: bool = False,
     ) -> dict[str, Any]:
         routes = []
         domains = []
@@ -151,6 +159,14 @@ class CaddyService:
             subjects = [f"*.{wildcard_domain}"] if wildcard_domain else domains
             config["apps"]["tls"] = {"automation": {"policies": [{"subjects": subjects, "issuers": [issuer]}]}}
 
+        if access_log_enabled:
+            # {} turns on access logging using Caddy's default logger, which
+            # writes to stderr - already captured by `docker logs`/our own
+            # stream_container_logs(), same as every other container's
+            # stdout+stderr. Revisit with an explicit encoder/writer only if
+            # manual testing (see Task 6) shows the default format is unusable.
+            config["apps"]["http"]["servers"]["litethaus"]["logs"] = {}
+
         return config
 
     def sync(self, stacks: list[Stack]) -> None:
@@ -164,6 +180,7 @@ class CaddyService:
             cloudflare_api_token=cfg.get("cloudflare_api_token", ""),
             wildcard_domain=cfg.get("wildcard_domain", ""),
             extra_routes_json=cfg.get("caddy_extra_routes_json", ""),
+            access_log_enabled=cfg.get("caddy_access_log_enabled", False),
         )
         req = urllib.request.Request(
             f"{self.admin_url}/load",
