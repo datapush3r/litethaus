@@ -5,7 +5,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from cert_service import parse_certificates
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from cert_service import cert_service, parse_certificates
 
 
 def _make_cert_pem(domain: str, issuer_cn: str, days_until_expiry: int) -> bytes:
@@ -53,9 +56,29 @@ def test_parse_certificates_returns_empty_list_for_empty_input() -> None:
     assert parse_certificates(b"") == []
 
 
+def test_list_certificates_returns_empty_when_no_caddy_container() -> None:
+    with patch("cert_service.docker_service.find_caddy_container", return_value=None):
+        assert cert_service.list_certificates() == []
+
+
+def test_list_certificates_execs_find_and_parses_output() -> None:
+    pem = _make_cert_pem("app.home.arpa", "CA", 30)
+    fake_container = SimpleNamespace(name="litethaus-caddy")
+    with patch("cert_service.docker_service.find_caddy_container", return_value=fake_container), \
+         patch("cert_service.docker_service.exec_run", return_value=(0, pem)) as exec_run:
+        result = cert_service.list_certificates()
+
+    assert result[0]["domains"] == ["app.home.arpa"]
+    exec_run.assert_called_once_with(
+        "litethaus-caddy", ["find", "/data/caddy/certificates", "-name", "*.crt", "-exec", "cat", "{}", "+"]
+    )
+
+
 if __name__ == "__main__":
     test_parse_certificates_extracts_domain_issuer_and_expiry()
     test_parse_certificates_handles_multiple_concatenated_pem_blocks()
     test_parse_certificates_skips_unparseable_blocks_without_raising()
     test_parse_certificates_returns_empty_list_for_empty_input()
+    test_list_certificates_returns_empty_when_no_caddy_container()
+    test_list_certificates_execs_find_and_parses_output()
     print("ok")

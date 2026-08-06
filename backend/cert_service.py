@@ -5,6 +5,8 @@ from typing import Any
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 
+from docker_service import docker_service
+
 logger = logging.getLogger(__name__)
 
 _PEM_BLOCK = re.compile(rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", re.DOTALL)
@@ -44,3 +46,20 @@ def parse_certificates(pem_data: bytes) -> list[dict[str, Any]]:
             }
         )
     return results
+
+
+CERT_FIND_CMD = ["find", CADDY_CERT_DIR, "-name", "*.crt", "-exec", "cat", "{}", "+"]
+
+
+class CertService:
+    def list_certificates(self) -> list[dict[str, Any]]:
+        container = docker_service.find_caddy_container()
+        if container is None:
+            return []
+        exit_code, output = docker_service.exec_run(container.name, CERT_FIND_CMD)
+        if exit_code != 0:
+            logger.warning("cert listing inside %s exited %s: %r", container.name, exit_code, output[:200])
+        return parse_certificates(output)
+
+
+cert_service = CertService()
