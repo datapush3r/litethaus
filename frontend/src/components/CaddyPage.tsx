@@ -204,8 +204,16 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
         </div>
       )}
 
-      {tab === 'Routes' && <CaddyRoutesTab stacks={stacks} onStacksChanged={onRowSaved} />}
-      {tab === 'TLS Certificates' && <CaddyCertificatesTab />}
+      {tab === 'Routes' && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <CaddyRoutesTab stacks={stacks} onStacksChanged={onRowSaved} />
+        </div>
+      )}
+      {tab === 'TLS Certificates' && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <CaddyCertificatesTab />
+        </div>
+      )}
       {tab === 'Access Logs' && (
         <div className="min-h-0 flex-1">
           <CaddyLogsTab />

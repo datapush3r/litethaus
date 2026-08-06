@@ -9,7 +9,7 @@ export function TabBar({ items, active, onSelect, titles }: TabBarProps) {
   if (items.length <= 1) return null
 
   return (
-    <div className="flex gap-1 overflow-x-auto">
+    <div className="flex shrink-0 gap-1 overflow-x-auto">
       {items.map((item) => (
         <button
           key={item}
