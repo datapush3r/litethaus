@@ -120,11 +120,11 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
   }
 
   return (
-    <div className="flex w-full flex-col gap-4">
+    <div className="flex h-full min-h-0 w-full flex-col gap-4">
       <TabBar items={TABS} active={tab} onSelect={setTab} />
 
       {tab === 'Overview' && (
-        <div className="flex flex-col gap-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-6">
           <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
             <div className="flex items-center justify-between">
               <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Sync status</h2>
@@ -158,7 +158,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
             )}
           </div>
 
-          <div>
+          <div className="flex min-h-0 flex-1 flex-col">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Generated Caddy config</h2>
               <button
@@ -170,29 +170,33 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
             </div>
             {configError && <p className="text-sm text-red-600 dark:text-red-400">{configError}</p>}
             {generatedConfig && (
-              <JsonEditor
-                value={JSON.stringify(generatedConfig, null, 2)}
-                readOnly
-                className="rounded border border-neutral-200 dark:border-neutral-800"
-              />
+              <div className="min-h-0 flex-1">
+                <JsonEditor
+                  value={JSON.stringify(generatedConfig, null, 2)}
+                  readOnly
+                  className="h-full rounded border border-neutral-200 dark:border-neutral-800"
+                />
+              </div>
             )}
 
             <button
               onClick={toggleLive}
-              className="mt-3 text-xs text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+              className="mt-3 shrink-0 text-xs text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
             >
               {liveOpen ? 'Hide' : 'Show'} live config on Caddy
             </button>
             {liveOpen && (
-              <div className="mt-2">
+              <div className="mt-2 flex min-h-0 flex-1 flex-col">
                 {liveLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500">loading…</p>}
                 {liveError && <p className="text-sm text-red-600 dark:text-red-400">{liveError}</p>}
                 {liveConfig && (
-                  <JsonEditor
-                    value={JSON.stringify(liveConfig, null, 2)}
-                    readOnly
-                    className="rounded border border-neutral-200 dark:border-neutral-800"
-                  />
+                  <div className="min-h-0 flex-1">
+                    <JsonEditor
+                      value={JSON.stringify(liveConfig, null, 2)}
+                      readOnly
+                      className="h-full rounded border border-neutral-200 dark:border-neutral-800"
+                    />
+                  </div>
                 )}
               </div>
             )}
@@ -202,22 +206,26 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
 
       {tab === 'Routes' && <CaddyRoutesTab stacks={stacks} onStacksChanged={onRowSaved} />}
       {tab === 'TLS Certificates' && <CaddyCertificatesTab />}
-      {tab === 'Access Logs' && <CaddyLogsTab />}
+      {tab === 'Access Logs' && (
+        <div className="min-h-0 flex-1">
+          <CaddyLogsTab />
+        </div>
+      )}
 
       {tab === 'Advanced' && (
-        <div>
-          <p className="mb-2 text-xs text-neutral-400 dark:text-neutral-500">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <p className="mb-2 shrink-0 text-xs text-neutral-400 dark:text-neutral-500">
             Raw Caddy route objects (JSON array), appended after the routes generated in the Routes tab. Leave blank
             to skip. Invalid JSON is ignored rather than breaking sync.
           </p>
-          <JsonEditor
-            value={extraRoutesJson}
-            onChange={setExtraRoutesJson}
-            minHeight="8rem"
-            maxHeight="40vh"
-            className="w-full rounded border border-neutral-300 dark:border-neutral-700"
-          />
-          <div className="mt-2 flex items-center gap-3">
+          <div className="min-h-0 flex-1">
+            <JsonEditor
+              value={extraRoutesJson}
+              onChange={setExtraRoutesJson}
+              className="h-full w-full rounded border border-neutral-300 dark:border-neutral-700"
+            />
+          </div>
+          <div className="mt-2 flex shrink-0 items-center gap-3">
             <button
               onClick={saveExtraRoutes}
               disabled={savingExtraRoutes}
