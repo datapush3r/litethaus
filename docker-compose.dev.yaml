@@ -28,6 +28,7 @@ services:
       context: ./caddy
     volumes:
       - ./caddy/Caddyfile:/etc/caddyfile
+      - caddy_data:/data
     command: caddy run --config /etc/caddyfile
     ports:
       - "80:80"
@@ -43,3 +44,6 @@ services:
 networks:
   litethaus:
     name: litethaus
+
+volumes:
+  caddy_data:
