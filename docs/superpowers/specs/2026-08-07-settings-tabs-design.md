@@ -14,7 +14,7 @@
 
 ### Tab boundaries
 
-**General** (default tab): `stacks_dir`, `project_prefix`, `auto_icon_enabled`, `webhook_url`, `theme`, change-password section, Save button + Saved/error indicators. Unchanged from today's fields and layout, minus what moves to the other two tabs.
+**General** (default tab): `stacks_dir`, `project_prefix`, `auto_icon_enabled`, `webhook_url`, `theme`, change-password section. Unchanged from today's fields and layout, minus what moves to the other two tabs. (Save button lives outside all three tabs — see below.)
 
 **Caddy**: the `caddy_enabled` checkbox moves here from its current position among the top-level fields (it's a Caddy setting, not a general one) + `caddy_admin_url`/`https_port`/`https_mode` (rendered when `caddy_enabled`, same as today) + `acme_email` (rendered when `https_mode === 'acme'`, same as today).
 
