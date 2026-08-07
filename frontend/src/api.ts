@@ -133,6 +133,7 @@ export interface Config {
   acme_email: string
   cloudflare_api_token: string
   wildcard_domain: string
+  ddns_domains: string[]
   caddy_extra_routes_json: string
   caddy_access_log_enabled: boolean
   caddy_container_name: string

@@ -21,6 +21,7 @@ interface FormState {
   acme_email: string
   cloudflare_api_token: string
   wildcard_domain: string
+  ddnsDomains: string
   theme: string
   webhook_url: string
 }
@@ -38,6 +39,7 @@ export function SettingsPage() {
     acme_email: '',
     cloudflare_api_token: '',
     wildcard_domain: '',
+    ddnsDomains: '',
     theme: 'system',
     webhook_url: '',
   })
@@ -67,6 +69,7 @@ export function SettingsPage() {
           acme_email: String(cfg.acme_email ?? ''),
           cloudflare_api_token: String(cfg.cloudflare_api_token ?? ''),
           wildcard_domain: String(cfg.wildcard_domain ?? ''),
+          ddnsDomains: Array.isArray(cfg.ddns_domains) ? cfg.ddns_domains.join(', ') : '',
           theme: String(cfg.theme ?? 'system'),
           webhook_url: String(cfg.webhook_url ?? ''),
         })
@@ -79,7 +82,12 @@ export function SettingsPage() {
     setSaved(false)
     setSaveError(null)
     try {
-      const updated = await updateConfig({ ...form })
+      const { ddnsDomains, ...rest } = form
+      const ddns_domains = ddnsDomains
+        .split(',')
+        .map((d) => d.trim())
+        .filter(Boolean)
+      const updated = await updateConfig({ ...rest, ddns_domains })
       setConfig(updated)
       setThemePreference(form.theme)
       setSaved(true)
@@ -229,32 +237,37 @@ export function SettingsPage() {
       )}
 
       {form.caddy_enabled && form.https_mode === 'acme' && (
-        <>
-          <div>
-            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-              ACME email
-            </label>
-            <input
-              value={form.acme_email}
-              onChange={(e) => setForm((f) => ({ ...f, acme_email: e.target.value }))}
-              placeholder="you@example.com"
-              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-            />
-          </div>
+        <div>
+          <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+            ACME email
+          </label>
+          <input
+            value={form.acme_email}
+            onChange={(e) => setForm((f) => ({ ...f, acme_email: e.target.value }))}
+            placeholder="you@example.com"
+            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          />
+        </div>
+      )}
+
+      {form.caddy_enabled && (
+        <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
+          <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Cloudflare</h2>
 
           <div>
             <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-              Cloudflare API token
+              API token
             </label>
             <input
               type="password"
               value={form.cloudflare_api_token}
               onChange={(e) => setForm((f) => ({ ...f, cloudflare_api_token: e.target.value }))}
-              placeholder="optional — enables DNS-01 + wildcard certs"
+              placeholder="optional — enables DNS-01 + wildcard certs, and DDNS below"
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              Needs Zone:Read + DNS:Edit permissions. Leave blank to use Caddy's default HTTP-01/TLS-ALPN-01 challenges.
+              Needs Zone:Read + DNS:Edit permissions. Leave blank to use Caddy's default HTTP-01/TLS-ALPN-01
+              challenges and disable DDNS.
             </p>
           </div>
 
@@ -269,11 +282,29 @@ export function SettingsPage() {
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              Optional. If set, issues one wildcard cert (e.g. *.example.com) covering every stack instead of a
-              cert per stack domain. Requires a Cloudflare API token above; leave blank to keep per-stack certs.
+              Optional, requires https_mode "acme" above. If set, issues one wildcard cert (e.g. *.example.com)
+              covering every stack instead of a cert per stack domain. Requires the API token above; leave blank
+              to keep per-stack certs.
             </p>
           </div>
-        </>
+
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              DDNS domains
+            </label>
+            <input
+              value={form.ddnsDomains}
+              onChange={(e) => setForm((f) => ({ ...f, ddnsDomains: e.target.value }))}
+              placeholder="example.com, other.com (optional)"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              Comma-separated. Each domain must already have an A record in Cloudflare — litethaus checks
+              this host's public IP every 5 minutes and keeps each record's IP in sync, using the API token
+              above. Never creates records or touches proxy/TTL settings. Leave blank to disable.
+            </p>
+          </div>
+        </div>
       )}
 
       <div>
