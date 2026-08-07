@@ -340,7 +340,7 @@ export function SettingsPage() {
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
               Needs Zone:Read + DNS:Edit permissions. Leave blank to use Caddy's default HTTP-01/TLS-ALPN-01
-              challenges and disable DDNS.
+              challenges (when the bundled Caddy proxy is enabled) and disable DDNS.
             </p>
           </div>
 
@@ -355,7 +355,7 @@ export function SettingsPage() {
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              Optional, requires https_mode "acme" on the Caddy tab. If set, issues one wildcard cert
+              Optional, requires https_mode "acme" on the Caddy tab (enable the bundled Caddy proxy first). If set, issues one wildcard cert
               (e.g. *.example.com) covering every stack instead of a cert per stack domain. Requires the
               API token above; leave blank to keep per-stack certs.
             </p>
@@ -380,7 +380,7 @@ export function SettingsPage() {
         </>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
         <button
           onClick={handleSave}
           disabled={saving}
