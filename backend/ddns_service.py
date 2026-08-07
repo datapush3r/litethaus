@@ -1,5 +1,7 @@
+import ipaddress
 import json
 import logging
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -20,7 +22,13 @@ def get_public_ip() -> str | None:
         return None
     for line in body.splitlines():
         if line.startswith("ip="):
-            return line[len("ip=") :].strip()
+            candidate = line[len("ip=") :].strip()
+            try:
+                ipaddress.IPv4Address(candidate)
+            except ValueError:
+                logger.warning("Cloudflare trace endpoint returned a non-IPv4 address: %r", candidate)
+                return None
+            return candidate
     return None
 
 
@@ -32,7 +40,10 @@ def _cf_request(token: str, path: str, method: str = "GET", body: dict[str, Any]
         method=method,
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
-        return json.load(resp)
+        data = json.load(resp)
+    if data.get("success") is False:
+        raise RuntimeError(f"Cloudflare API error: {data.get('errors')}")
+    return data
 
 
 def find_zone_id(token: str, domain: str) -> str | None:
@@ -51,7 +62,7 @@ def find_zone_id(token: str, domain: str) -> str | None:
 
 
 def find_record(token: str, zone_id: str, domain: str) -> dict[str, Any] | None:
-    data = _cf_request(token, f"/zones/{zone_id}/dns_records?type=A&name={domain}")
+    data = _cf_request(token, f"/zones/{zone_id}/dns_records?type=A&name={urllib.parse.quote(domain)}")
     results = data.get("result") or []
     return results[0] if results else None
 

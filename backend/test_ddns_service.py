@@ -18,6 +18,16 @@ def test_get_public_ip_returns_none_on_failure() -> None:
         assert get_public_ip() is None
 
 
+def test_get_public_ip_returns_none_for_ipv6_address() -> None:
+    from ddns_service import get_public_ip
+
+    fake_resp = MagicMock()
+    fake_resp.read.return_value = b"fl=1\nip=2001:db8::1\nts=123\n"
+    fake_resp.__enter__.return_value = fake_resp
+    with patch("ddns_service.urllib.request.urlopen", return_value=fake_resp):
+        assert get_public_ip() is None
+
+
 def test_find_zone_id_picks_longest_matching_suffix() -> None:
     from ddns_service import find_zone_id
 
@@ -46,6 +56,20 @@ def test_update_record_patches_only_content_field() -> None:
         cf_request.assert_called_once_with(
             "tok", "/zones/zone1/dns_records/rec1", method="PATCH", body={"content": "9.9.9.9"}
         )
+
+
+def test_cf_request_raises_when_success_false() -> None:
+    from ddns_service import _cf_request
+
+    mock_resp = MagicMock()
+    with patch("ddns_service.urllib.request.urlopen") as mock_urlopen, \
+         patch("ddns_service.json.load", return_value={"success": False, "errors": ["API error"]}):
+        mock_urlopen.return_value.__enter__.return_value = mock_resp
+        try:
+            _cf_request("tok", "/zones")
+            assert False, "Expected RuntimeError"
+        except RuntimeError as e:
+            assert "API error" in str(e)
 
 
 def test_sync_skips_update_when_ip_unchanged() -> None:
@@ -130,9 +154,11 @@ def test_sync_continues_past_one_domains_error() -> None:
 if __name__ == "__main__":
     test_get_public_ip_parses_trace_response()
     test_get_public_ip_returns_none_on_failure()
+    test_get_public_ip_returns_none_for_ipv6_address()
     test_find_zone_id_picks_longest_matching_suffix()
     test_find_zone_id_returns_none_when_no_zone_matches()
     test_update_record_patches_only_content_field()
+    test_cf_request_raises_when_success_false()
     test_sync_skips_update_when_ip_unchanged()
     test_sync_updates_record_when_ip_changed()
     test_sync_errors_when_public_ip_unavailable()
