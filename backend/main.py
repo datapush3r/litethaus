@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import re
 import threading
 from contextlib import aclosing, asynccontextmanager, suppress
 from dataclasses import asdict
@@ -17,6 +19,21 @@ from docker_service import docker_service
 from health_service import health_service
 from stacks_service import stack_service
 from terminal_service import terminal_service
+
+# The dashboard polls GET /stacks/{name}/status per stack every 5s (see
+# STATUS_POLL_MS in App.tsx) - with dozens of stacks that's a continuous
+# flood in `docker logs`, drowning out anything that actually matters.
+# Same deal for /health (hit repeatedly by curl/monitoring). Root-caused
+# once here rather than special-cased per route.
+_NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks/[^/ ]+/status|/health) HTTP')
+
+
+class _SuppressPollingAccessLogs(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not _NOISY_ACCESS_LOG_RE.search(record.getMessage())
+
+
+logging.getLogger("uvicorn.access").addFilter(_SuppressPollingAccessLogs())
 
 
 @asynccontextmanager
