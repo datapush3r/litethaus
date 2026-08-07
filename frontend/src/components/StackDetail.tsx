@@ -4,6 +4,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
   deleteStack,
   fetchCaddyCertificates,
+  fetchHealthLog,
   fetchStackRaw,
   logsSocketUrl,
   stackUrl,
@@ -55,6 +56,8 @@ export function StackDetail({
   onDeleted,
 }: StackDetailProps) {
   const [lines, setLines] = useState<string[]>([])
+  const [bottomTab, setBottomTab] = useState<'logs' | 'health'>('logs')
+  const [healthLines, setHealthLines] = useState<string[]>([])
   const [rawContent, setRawContent] = useState<string | null>(null)
   const [draftContent, setDraftContent] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -96,6 +99,22 @@ export function StackDetail({
     ws.onmessage = (event) => setLines((prev) => [...prev, event.data])
     return () => ws.close()
   }, [stack.name, activeLogsContainer])
+
+  useEffect(() => {
+    if (bottomTab !== 'health') return
+    let cancelled = false
+    const load = () =>
+      fetchHealthLog(stack.name).then((entries) => {
+        if (cancelled) return
+        setHealthLines(entries.map((e) => `${new Date(e.time).toLocaleString()}  ${e.health}`))
+      })
+    load()
+    const interval = setInterval(load, 15000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [stack.name, bottomTab])
 
   useEffect(() => {
     setDeleteError(null)
@@ -547,15 +566,21 @@ export function StackDetail({
             <Panel defaultSize={50} minSize={15}>
               <div className="flex h-full min-h-0 flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="shrink-0 text-xs uppercase text-neutral-400 dark:text-neutral-500">Logs</h3>
                   <TabBar
-                    items={containers.map((c) => c.name)}
-                    active={activeLogsContainer}
-                    onSelect={setSelectedLogsContainer}
+                    items={['logs', 'health']}
+                    active={bottomTab}
+                    onSelect={(v) => setBottomTab(v as 'logs' | 'health')}
                   />
+                  {bottomTab === 'logs' && (
+                    <TabBar
+                      items={containers.map((c) => c.name)}
+                      active={activeLogsContainer}
+                      onSelect={setSelectedLogsContainer}
+                    />
+                  )}
                 </div>
                 <div className="min-h-0 flex-1">
-                  <LogPanel lines={lines} />
+                  <LogPanel lines={bottomTab === 'logs' ? lines : healthLines} />
                 </div>
               </div>
             </Panel>

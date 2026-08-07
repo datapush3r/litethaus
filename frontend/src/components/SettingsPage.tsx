@@ -27,6 +27,7 @@ interface FormState {
   ddnsDomains: string
   theme: string
   webhook_url: string
+  healthchecks_url: string
 }
 
 export function SettingsPage() {
@@ -46,6 +47,7 @@ export function SettingsPage() {
     ddnsDomains: '',
     theme: 'system',
     webhook_url: '',
+    healthchecks_url: '',
   })
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -76,6 +78,7 @@ export function SettingsPage() {
           ddnsDomains: Array.isArray(cfg.ddns_domains) ? cfg.ddns_domains.join(', ') : '',
           theme: String(cfg.theme ?? 'system'),
           webhook_url: String(cfg.webhook_url ?? ''),
+          healthchecks_url: String(cfg.healthchecks_url ?? ''),
         })
       })
       .catch(() => setLoadError('failed to load config'))
@@ -190,6 +193,22 @@ export function SettingsPage() {
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
               POSTed as JSON when a stack becomes unhealthy or enters a restart loop. Leave blank to disable.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              Healthchecks.io ping URL
+            </label>
+            <input
+              value={form.healthchecks_url}
+              onChange={(e) => setForm((f) => ({ ...f, healthchecks_url: e.target.value }))}
+              placeholder="https://hc-ping.com/… (optional)"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              Pinged on every health-check poll so an external monitor can tell if litethaus itself stops
+              running. Leave blank to disable.
             </p>
           </div>
 

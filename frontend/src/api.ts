@@ -34,6 +34,17 @@ export async function fetchStatus(name: string): Promise<StackStatus> {
   return res.json()
 }
 
+export interface HealthLogEntry {
+  time: string
+  stack: string
+  health: string
+}
+
+export async function fetchHealthLog(name: string): Promise<HealthLogEntry[]> {
+  const res = await fetch(`/api/stacks/${name}/health-log`)
+  return res.json()
+}
+
 export async function stackUp(name: string): Promise<{ ok: boolean; output: string }> {
   const res = await fetch(`/api/stacks/${name}/up`, { method: 'POST' })
   return res.json()
@@ -139,6 +150,7 @@ export interface Config {
   caddy_container_name: string
   theme: string
   webhook_url: string
+  healthchecks_url: string
   [key: string]: unknown
 }
 

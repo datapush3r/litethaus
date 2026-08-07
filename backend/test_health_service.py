@@ -1,6 +1,6 @@
 import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from health_service import HealthService
 
@@ -137,6 +137,44 @@ def test_check_ddns_drops_stale_entry_when_domain_removed_from_config() -> None:
         assert "gone.example.com" not in svc._ddns_failing
 
 
+def test_ping_healthchecks_skips_when_no_url_configured() -> None:
+    svc = _svc()
+    with patch("health_service.urllib.request.urlopen") as urlopen:
+        svc._ping_healthchecks("")
+        urlopen.assert_not_called()
+
+
+def test_ping_healthchecks_pings_configured_url() -> None:
+    svc = _svc()
+    with patch("health_service.urllib.request.urlopen") as urlopen:
+        svc._ping_healthchecks("https://hc-ping.com/some-uuid")
+        assert urlopen.call_count == 1
+        assert urlopen.call_args[0][0] == "https://hc-ping.com/some-uuid"
+
+
+def test_ping_healthchecks_swallows_errors() -> None:
+    svc = _svc()
+    with patch("health_service.urllib.request.urlopen", side_effect=OSError("unreachable")):
+        svc._ping_healthchecks("https://hc-ping.com/some-uuid")  # must not raise
+
+
+def test_check_once_logs_health_transitions_only() -> None:
+    svc = _svc()
+    stack = Mock()
+    stack.name = "app"
+    stack.error = None
+    with patch("health_service.stack_service.list_stacks", return_value=[stack]), \
+         patch("health_service.config_service.load", return_value={}), \
+         patch("health_service.docker_service.container_details", return_value=[]), \
+         patch("health_service.docker_service.summarize_health", side_effect=["healthy", "healthy", "unhealthy"]):
+        svc.check_once()  # healthy: first sighting, logged
+        svc.check_once()  # still healthy: no change, not logged
+        svc.check_once()  # flips unhealthy: logged
+    log = svc.health_log("app")
+    assert [e["health"] for e in log] == ["healthy", "unhealthy"]
+    assert svc.health_log("other-stack") == []
+
+
 if __name__ == "__main__":
     test_check_certs_skips_when_no_webhook_configured()
     test_check_certs_respects_time_gate()
@@ -148,4 +186,8 @@ if __name__ == "__main__":
     test_check_ddns_notifies_once_on_first_failure_then_stays_silent()
     test_check_ddns_recovery_is_silent_and_clears_failing_state()
     test_check_ddns_drops_stale_entry_when_domain_removed_from_config()
+    test_ping_healthchecks_skips_when_no_url_configured()
+    test_ping_healthchecks_pings_configured_url()
+    test_ping_healthchecks_swallows_errors()
+    test_check_once_logs_health_transitions_only()
     print("ok")

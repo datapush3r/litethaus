@@ -1,5 +1,4 @@
 import asyncio
-import os
 import threading
 from contextlib import aclosing, asynccontextmanager, suppress
 from dataclasses import asdict
@@ -17,6 +16,7 @@ from config_service import config_service
 from docker_service import docker_service
 from health_service import health_service
 from stacks_service import stack_service
+from terminal_service import terminal_service
 
 
 @asynccontextmanager
@@ -301,6 +301,12 @@ def stack_status(name: str) -> dict[str, Any]:
     }
 
 
+@app.get("/stacks/{name}/health-log")
+def stack_health_log(name: str) -> list[dict[str, str]]:
+    _get_stack(name)
+    return health_service.health_log(name)
+
+
 @app.post("/stacks/{name}/up")
 def stack_up(name: str) -> dict[str, Any]:
     ok, output = docker_service.compose_up(_get_stack(name))
@@ -404,24 +410,26 @@ async def stack_terminal(websocket: WebSocket, name: str, container: str) -> Non
         return
 
     await websocket.accept()
-    master_fd, process = docker_service.exec_shell(target.name)
+    session = terminal_service.get_or_create(target.name)
     loop = asyncio.get_event_loop()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+
+    def on_data(data: bytes) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, data)
+
+    backlog = session.subscribe(on_data)
+    if backlog:
+        await websocket.send_bytes(backlog)
 
     async def pump_output() -> None:
         while True:
-            try:
-                data = await loop.run_in_executor(None, os.read, master_fd, 4096)
-            except OSError:
-                break
-            if not data:
-                break
-            await websocket.send_bytes(data)
+            await websocket.send_bytes(await queue.get())
 
     async def pump_input() -> None:
         with suppress(WebSocketDisconnect):
             while True:
                 data = await websocket.receive_bytes()
-                await loop.run_in_executor(None, os.write, master_fd, data)
+                await loop.run_in_executor(None, session.write, data)
 
     output_task = asyncio.create_task(pump_output())
     input_task = asyncio.create_task(pump_input())
@@ -430,8 +438,9 @@ async def stack_terminal(websocket: WebSocket, name: str, container: str) -> Non
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
-    process.terminate()
-    os.close(master_fd)
+    session.unsubscribe(on_data)
+    # Session is deliberately left running - see terminal_service.py. Only
+    # disconnecting, not killing, is what makes the terminal persistent.
 
 
 @app.websocket("/api/caddy/logs")

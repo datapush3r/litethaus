@@ -3,6 +3,7 @@ import logging
 import threading
 import time
 import urllib.request
+from collections import deque
 from datetime import datetime, timezone
 
 from cert_service import cert_service
@@ -14,6 +15,7 @@ from stacks_service import stack_service
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 15
+HEALTH_LOG_MAXLEN = 500  # ponytail: global ring buffer, split per-stack if one noisy stack starts crowding others out
 CERT_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 CERT_EXPIRY_WARNING_DAYS = 14
 DDNS_CHECK_INTERVAL_SECONDS = 300
@@ -22,6 +24,7 @@ DDNS_CHECK_INTERVAL_SECONDS = 300
 class HealthService:
     def __init__(self) -> None:
         self._last_health: dict[str, str] = {}
+        self._health_log: deque[dict[str, str]] = deque(maxlen=HEALTH_LOG_MAXLEN)
         self._stop_event: threading.Event | None = None
         self._last_cert_check: float = float("-inf")
         self._alerted_certs: set[str] = set()
@@ -29,17 +32,40 @@ class HealthService:
         self._ddns_failing: set[str] = set()
 
     def check_once(self) -> None:
-        webhook_url = config_service.load().get("webhook_url") or ""
+        cfg = config_service.load()
+        webhook_url = cfg.get("webhook_url") or ""
         for stack in stack_service.list_stacks():
             if stack.error:
                 continue
             health = docker_service.summarize_health(docker_service.container_details(stack))
-            became_bad = health in BAD_HEALTH_STATES and self._last_health.get(stack.name) != health
+            changed = self._last_health.get(stack.name) != health
+            if changed:
+                self._health_log.append(
+                    {
+                        "time": datetime.now(timezone.utc).isoformat(),
+                        "stack": stack.name,
+                        "health": health,
+                    }
+                )
+            became_bad = health in BAD_HEALTH_STATES and changed
             self._last_health[stack.name] = health
             if became_bad and webhook_url:
                 self._notify(webhook_url, stack.name, health)
         self._check_certs_once(webhook_url)
         self._check_ddns_once(webhook_url)
+        self._ping_healthchecks(cfg.get("healthchecks_url") or "")
+
+    def _ping_healthchecks(self, url: str) -> None:
+        # Dead-man's-switch ping (https://healthchecks.io): fired every poll
+        # tick just like the rest of check_once() - a missed ping is what
+        # tells healthchecks.io (not litethaus) that this process died, so
+        # it must not be gated behind any of check_once()'s own logic.
+        if not url:
+            return
+        try:
+            urllib.request.urlopen(url, timeout=5)
+        except Exception:
+            logger.exception("Failed to ping healthchecks.io")
 
     def _notify(self, webhook_url: str, stack_name: str, health: str) -> None:
         req = urllib.request.Request(
@@ -132,6 +158,9 @@ class HealthService:
             urllib.request.urlopen(req, timeout=5)
         except Exception:
             logger.exception("Failed to send DDNS-error webhook for %s", domain)
+
+    def health_log(self, stack_name: str) -> list[dict[str, str]]:
+        return [e for e in self._health_log if e["stack"] == stack_name]
 
     def watch_forever(self) -> None:
         stop_event = threading.Event()

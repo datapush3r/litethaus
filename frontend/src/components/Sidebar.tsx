@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -46,8 +46,14 @@ export function Sidebar({
   onLogout,
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(true)
-  const [sortBy, setSortBy] = useState<SortMode>('name')
+  const [sortBy, setSortBy] = useState<SortMode>(
+    () => (localStorage.getItem('litethaus-sidebar-sort') as SortMode | null) ?? 'state',
+  )
   const selected = route.view === 'stack' ? route.name : null
+
+  useEffect(() => {
+    localStorage.setItem('litethaus-sidebar-sort', sortBy)
+  }, [sortBy])
 
   const sortedStacks = useMemo(() => {
     const sorted = [...stacks]

@@ -97,6 +97,12 @@ theme: system
 # loop (JSON body: {"stack": name, "health": "unhealthy"|"restarting"}).
 # Leave blank to disable.
 webhook_url: ""
+
+# healthchecks.io (or compatible) dead-man's-switch ping URL, e.g.
+# https://hc-ping.com/<uuid>. Pinged on every health-check poll tick so an
+# external monitor can alert if litethaus itself stops running. Leave blank
+# to disable.
+healthchecks_url: ""
 """
 
 
