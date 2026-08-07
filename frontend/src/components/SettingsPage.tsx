@@ -8,7 +8,7 @@ const THEME_OPTIONS = ['system', 'light', 'dark'] as const
 const HTTPS_MODE_OPTIONS = [
   { value: 'off', label: 'Off (HTTP only)' },
   { value: 'internal', label: 'Internal (self-signed, for .home.arpa/.local domains)' },
-  { value: 'acme', label: 'ACME (Let's Encrypt, requires a public domain)' },
+  { value: 'acme', label: 'ACME (Let’s Encrypt, requires a public domain)' },
 ] as const
 
 const TABS = ['General', 'Caddy', 'Cloudflare']
