@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from cert_service import cert_service
 from config_service import config_service
+from ddns_service import ddns_service
 from docker_service import BAD_HEALTH_STATES, docker_service
 from stacks_service import stack_service
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 POLL_INTERVAL_SECONDS = 15
 CERT_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 CERT_EXPIRY_WARNING_DAYS = 14
+DDNS_CHECK_INTERVAL_SECONDS = 300
 
 
 class HealthService:
@@ -23,6 +25,8 @@ class HealthService:
         self._stop_event: threading.Event | None = None
         self._last_cert_check: float = float("-inf")
         self._alerted_certs: set[str] = set()
+        self._last_ddns_check: float = float("-inf")
+        self._ddns_failing: set[str] = set()
 
     def check_once(self) -> None:
         webhook_url = config_service.load().get("webhook_url") or ""
@@ -35,6 +39,7 @@ class HealthService:
             if became_bad and webhook_url:
                 self._notify(webhook_url, stack.name, health)
         self._check_certs_once(webhook_url)
+        self._check_ddns_once(webhook_url)
 
     def _notify(self, webhook_url: str, stack_name: str, health: str) -> None:
         req = urllib.request.Request(
@@ -81,6 +86,53 @@ class HealthService:
             urllib.request.urlopen(req, timeout=5)
         except Exception:
             logger.exception("Failed to send cert-expiry webhook for %s", domain)
+
+    def _check_ddns_once(self, webhook_url: str) -> None:
+        now = time.monotonic()
+        if now - self._last_ddns_check < DDNS_CHECK_INTERVAL_SECONDS:
+            return
+        self._last_ddns_check = now
+        cfg = config_service.load()
+        token = cfg.get("cloudflare_api_token") or ""
+        domains = cfg.get("ddns_domains") or []
+        if not token or not domains:
+            return
+        for result in ddns_service.sync(token, domains):
+            domain = result["domain"]
+            if result["status"] == "updated":
+                if webhook_url:
+                    self._notify_ddns_change(webhook_url, domain, result["old_ip"], result["new_ip"])
+                self._ddns_failing.discard(domain)
+            elif result["status"] == "error":
+                if domain not in self._ddns_failing and webhook_url:
+                    self._notify_ddns_error(webhook_url, domain, result["detail"])
+                self._ddns_failing.add(domain)
+            else:
+                self._ddns_failing.discard(domain)
+
+    def _notify_ddns_change(self, webhook_url: str, domain: str, old_ip: str | None, new_ip: str | None) -> None:
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps({"ddns_domain": domain, "old_ip": old_ip, "new_ip": new_ip}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            logger.exception("Failed to send DDNS-change webhook for %s", domain)
+
+    def _notify_ddns_error(self, webhook_url: str, domain: str, detail: str | None) -> None:
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps({"ddns_error": domain, "detail": detail}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            logger.exception("Failed to send DDNS-error webhook for %s", domain)
 
     def watch_forever(self) -> None:
         stop_event = threading.Event()

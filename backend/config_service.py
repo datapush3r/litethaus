@@ -66,6 +66,12 @@ cloudflare_api_token: ""
 # wildcard). Leave blank to keep today's per-stack-domain certs.
 wildcard_domain: ""
 
+# Domains to keep pointed at this host's current public IP via Cloudflare's
+# API. Requires cloudflare_api_token above. Each domain must already have an
+# A record in Cloudflare - litethaus updates the IP, never creates records or
+# touches proxied/TTL. Leave empty to disable.
+ddns_domains: []
+
 # Advanced: raw Caddy route objects (JSON array) appended after the routes
 # litethaus generates per-stack, for cases the domain/port/service model
 # doesn't cover. Leave blank to skip. Invalid JSON is ignored (logged) rather
