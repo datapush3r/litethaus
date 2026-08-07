@@ -68,10 +68,11 @@ Global settings live in `config.yaml`, generated automatically with defaults on 
 | `caddy_admin_url` | Base URL for Caddy's admin API |
 | `https_mode` | `off`, `internal` (self-signed), or `acme` (Let's Encrypt) |
 | `acme_email` | Registration email, required when `https_mode` is `acme` |
-| `cloudflare_api_token` | Cloudflare API token for DNS-01 ACME challenges (Zone:Read + DNS:Edit); enables wildcard certs; leave blank for HTTP-01/TLS-ALPN-01 |
+| `cloudflare_api_token` | Cloudflare API token (Zone:Read + DNS:Edit) used for DNS-01 ACME challenges/wildcard certs and for DDNS (`ddns_domains` below); leave blank to disable both |
 | `wildcard_domain` | Issue one wildcard cert (`*.<domain>`) covering every stack instead of a cert per stack domain; requires `cloudflare_api_token`; leave blank for per-stack certs |
+| `ddns_domains` | Domains to keep pointed at this host's current public IP via Cloudflare's API; requires `cloudflare_api_token`; each domain must already have an A record in Cloudflare (update-only, never creates records); checked every 5 minutes; leave empty to disable |
 | `theme` | `light`, `dark`, or `system` |
-| `webhook_url` | Optional webhook POSTed to when a stack becomes unhealthy or restart-loops (`{"stack": "<name>", "health": "<state>"}`), and once a day for any TLS cert within 14 days of expiry (`{"cert_domain": "<domain>", "days_until_expiry": <int>}`) |
+| `webhook_url` | Optional webhook POSTed to when a stack becomes unhealthy or restart-loops (`{"stack": "<name>", "health": "<state>"}`), once a day for any TLS cert within 14 days of expiry (`{"cert_domain": "<domain>", "days_until_expiry": <int>}`), and for DDNS IP changes (`{"ddns_domain": "<name>", "old_ip": "<ip>", "new_ip": "<ip>"}`) or failures (`{"ddns_error": "<name>", "detail": "<string>"}`) |
 
 Per-stack settings live in a `.litethaus.yaml` file inside each stack's own directory, alongside its compose file:
 

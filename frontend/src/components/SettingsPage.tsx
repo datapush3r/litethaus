@@ -287,25 +287,36 @@ export function SettingsPage() {
               to keep per-stack certs.
             </p>
           </div>
-
-          <div>
-            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-              DDNS domains
-            </label>
-            <input
-              value={form.ddnsDomains}
-              onChange={(e) => setForm((f) => ({ ...f, ddnsDomains: e.target.value }))}
-              placeholder="example.com, other.com (optional)"
-              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-            />
-            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              Comma-separated. Each domain must already have an A record in Cloudflare — litethaus checks
-              this host's public IP every 5 minutes and keeps each record's IP in sync, using the API token
-              above. Never creates records or touches proxy/TTL settings. Leave blank to disable.
-            </p>
-          </div>
         </div>
       )}
+
+      <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
+        <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Cloudflare DDNS</h2>
+
+        <div>
+          <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+            DDNS domains
+          </label>
+          <input
+            value={form.ddnsDomains}
+            onChange={(e) => setForm((f) => ({ ...f, ddnsDomains: e.target.value }))}
+            placeholder="example.com, other.com (optional)"
+            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          />
+          <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+            Comma-separated. Each domain must already have an A record in Cloudflare — litethaus checks
+            this host's public IP every 5 minutes and keeps each record's IP in sync, using the Cloudflare
+            API token above. Never creates records or touches proxy/TTL settings. Leave blank to disable.
+            {!form.caddy_enabled && (
+              <>
+                {' '}
+                Requires a Cloudflare API token — enable the bundled Caddy proxy above to set one, or set
+                cloudflare_api_token directly in config.yaml.
+              </>
+            )}
+          </p>
+        </div>
+      </div>
 
       <div>
         <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">

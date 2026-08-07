@@ -64,6 +64,11 @@ def find_zone_id(token: str, domain: str) -> str | None:
 def find_record(token: str, zone_id: str, domain: str) -> dict[str, Any] | None:
     data = _cf_request(token, f"/zones/{zone_id}/dns_records?type=A&name={urllib.parse.quote(domain)}")
     results = data.get("result") or []
+    if len(results) > 1:
+        # Cloudflare doesn't guarantee result ordering - guessing which of
+        # multiple A records (round-robin DNS) to update risks flip-flopping
+        # between them. Error instead, matching the zero-records posture.
+        raise RuntimeError(f"multiple A records found for {domain}, refusing to guess which to update")
     return results[0] if results else None
 
 

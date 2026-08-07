@@ -97,18 +97,17 @@ class HealthService:
         domains = cfg.get("ddns_domains") or []
         if not token or not domains:
             return
+        still_failing: set[str] = set()
         for result in ddns_service.sync(token, domains):
             domain = result["domain"]
             if result["status"] == "updated":
                 if webhook_url:
                     self._notify_ddns_change(webhook_url, domain, result["old_ip"], result["new_ip"])
-                self._ddns_failing.discard(domain)
             elif result["status"] == "error":
                 if domain not in self._ddns_failing and webhook_url:
                     self._notify_ddns_error(webhook_url, domain, result["detail"])
-                self._ddns_failing.add(domain)
-            else:
-                self._ddns_failing.discard(domain)
+                still_failing.add(domain)
+        self._ddns_failing = still_failing
 
     def _notify_ddns_change(self, webhook_url: str, domain: str, old_ip: str | None, new_ip: str | None) -> None:
         req = urllib.request.Request(

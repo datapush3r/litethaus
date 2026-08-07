@@ -137,6 +137,32 @@ def test_sync_errors_when_record_not_found_and_does_not_create() -> None:
         assert "record" in results[0]["detail"].lower()
 
 
+def test_find_record_raises_when_multiple_a_records_found() -> None:
+    from ddns_service import find_record
+
+    records_response = {"result": [{"id": "rec1", "content": "1.1.1.1"}, {"id": "rec2", "content": "2.2.2.2"}]}
+    with patch("ddns_service._cf_request", return_value=records_response):
+        try:
+            find_record("tok", "zone1", "app.example.com")
+            assert False, "Expected RuntimeError"
+        except RuntimeError as e:
+            assert "multiple A records" in str(e)
+
+
+def test_sync_errors_when_multiple_a_records_found() -> None:
+    from ddns_service import DdnsService
+
+    svc = DdnsService()
+    with patch("ddns_service.get_public_ip", return_value="5.6.7.8"), \
+         patch("ddns_service.find_zone_id", return_value="zone1"), \
+         patch("ddns_service.find_record", side_effect=RuntimeError("multiple A records found for app.example.com, refusing to guess which to update")), \
+         patch("ddns_service.update_record") as update_record:
+        results = svc.sync("tok", ["app.example.com"])
+        update_record.assert_not_called()
+        assert results[0]["status"] == "error"
+        assert "multiple A records" in results[0]["detail"]
+
+
 def test_sync_continues_past_one_domains_error() -> None:
     from ddns_service import DdnsService
 
@@ -164,5 +190,7 @@ if __name__ == "__main__":
     test_sync_errors_when_public_ip_unavailable()
     test_sync_errors_when_zone_not_found()
     test_sync_errors_when_record_not_found_and_does_not_create()
+    test_find_record_raises_when_multiple_a_records_found()
+    test_sync_errors_when_multiple_a_records_found()
     test_sync_continues_past_one_domains_error()
     print("ok")

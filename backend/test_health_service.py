@@ -124,6 +124,19 @@ def test_check_ddns_recovery_is_silent_and_clears_failing_state() -> None:
         assert "app.example.com" not in svc._ddns_failing
 
 
+def test_check_ddns_drops_stale_entry_when_domain_removed_from_config() -> None:
+    svc = _svc()
+    svc._ddns_failing = {"gone.example.com"}
+    result = [{"domain": "app.example.com", "status": "unchanged", "old_ip": "1.2.3.4", "new_ip": "1.2.3.4", "detail": None}]
+    with patch(
+        "health_service.config_service.load",
+        return_value={"cloudflare_api_token": "tok", "ddns_domains": ["app.example.com"]},
+    ), patch("health_service.ddns_service.sync", return_value=result), \
+         patch("health_service.urllib.request.urlopen"):
+        svc._check_ddns_once("http://hook.example.com")
+        assert "gone.example.com" not in svc._ddns_failing
+
+
 if __name__ == "__main__":
     test_check_certs_skips_when_no_webhook_configured()
     test_check_certs_respects_time_gate()
@@ -134,4 +147,5 @@ if __name__ == "__main__":
     test_check_ddns_notifies_on_ip_change()
     test_check_ddns_notifies_once_on_first_failure_then_stays_silent()
     test_check_ddns_recovery_is_silent_and_clears_failing_state()
+    test_check_ddns_drops_stale_entry_when_domain_removed_from_config()
     print("ok")
