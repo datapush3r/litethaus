@@ -32,10 +32,10 @@ export function CaddyCertificatesTab() {
             </tr>
           </thead>
           <tbody>
-            {certs?.map((cert) => {
+            {certs?.map((cert, i) => {
               const days = daysUntil(cert.expires_at)
               return (
-                <tr key={cert.domains.join(',') + cert.expires_at} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                <tr key={`${cert.domains.join(',')}-${cert.expires_at}-${i}`} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-1.5 text-neutral-700 dark:text-neutral-200">{cert.domains.join(', ') || '—'}</td>
                   <td className="px-3 py-1.5 text-neutral-500 dark:text-neutral-400">{cert.issuer}</td>
                   <td className="px-3 py-1.5 text-neutral-500 dark:text-neutral-400">{new Date(cert.expires_at).toLocaleDateString()}</td>
