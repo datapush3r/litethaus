@@ -37,6 +37,25 @@ class _SuppressPollingAccessLogs(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(_SuppressPollingAccessLogs())
 
 
+async def _watch_disconnect(websocket: WebSocket) -> None:
+    # A client that only receives (never sends) leaves us blocked on the
+    # next docker log line forever unless we watch for the disconnect frame
+    # concurrently instead of discovering it lazily on send.
+    #
+    # WebSocket.receive() is the raw ASGI-message-level call - unlike
+    # receive_text()/receive_bytes(), it does NOT raise WebSocketDisconnect
+    # itself on a "websocket.disconnect" message, it just returns it. Loop
+    # around calling it again and starlette raises a bare RuntimeError
+    # instead ("Cannot call receive once a disconnect message has been
+    # received."), which isn't WebSocketDisconnect and so isn't suppressed -
+    # it crashes out through the ASGI app instead. Raise it ourselves.
+    with suppress(WebSocketDisconnect):
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect(message.get("code", 1000))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     stack_service.scan()
@@ -388,16 +407,8 @@ async def stack_logs(websocket: WebSocket, name: str, container: str | None = No
                     await websocket.send_text(line)
             await asyncio.sleep(1)
 
-    async def watch_disconnect() -> None:
-        # A client that only receives (never sends) leaves us blocked on the
-        # next docker log line forever unless we watch for the disconnect
-        # frame concurrently instead of discovering it lazily on send.
-        with suppress(WebSocketDisconnect):
-            while True:
-                await websocket.receive()
-
     forward_task = asyncio.create_task(forward_logs())
-    disconnect_task = asyncio.create_task(watch_disconnect())
+    disconnect_task = asyncio.create_task(_watch_disconnect(websocket))
     done, pending = await asyncio.wait({forward_task, disconnect_task}, return_when=asyncio.FIRST_COMPLETED)
     for task in pending:
         task.cancel()
@@ -481,13 +492,8 @@ async def caddy_logs(websocket: WebSocket) -> None:
                     await websocket.send_text(line)
             await asyncio.sleep(1)
 
-    async def watch_disconnect() -> None:
-        with suppress(WebSocketDisconnect):
-            while True:
-                await websocket.receive()
-
     forward_task = asyncio.create_task(forward_logs())
-    disconnect_task = asyncio.create_task(watch_disconnect())
+    disconnect_task = asyncio.create_task(_watch_disconnect(websocket))
     done, pending = await asyncio.wait({forward_task, disconnect_task}, return_when=asyncio.FIRST_COMPLETED)
     for task in pending:
         task.cancel()
