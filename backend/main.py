@@ -218,7 +218,10 @@ def caddy_upstreams() -> list[dict[str, Any]]:
 
 @app.get("/caddy/certificates")
 def caddy_certificates() -> list[dict[str, Any]]:
-    return cert_service.list_certificates()
+    try:
+        return cert_service.list_certificates()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Caddy unreachable: {exc}")
 
 
 @app.get("/stacks")
@@ -268,7 +271,7 @@ def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
 @app.patch("/stacks/{name}/metadata")
 def update_stack_metadata(name: str, body: dict[str, Any]) -> dict[str, Any]:
     _get_stack(name)
-    allowed = {"icon", "port", "domain", "service", "favorite", "lan_only"}
+    allowed = {"icon", "port", "domain", "service", "favorite", "lan_only", "passive_health_check"}
     patch = {k: v for k, v in body.items() if k in allowed}
     try:
         stack = stack_service.update_metadata(name, patch)

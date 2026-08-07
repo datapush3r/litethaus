@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 # Applied to a stack's route when its .litethaus.yaml sets lan_only: true -
 # same private-address ranges a typical LAN-allowlist reverse-proxy rule uses.
-LAN_ONLY_RANGES = ["10.0.0.0/8", "172.0.0.0/16", "192.168.0.0/16"]
+# 172.16.0.0/12 (not /16) is the actual RFC1918 block - it's also what
+# Docker's default bridge network hands out (e.g. 172.17.0.0/16), so the
+# narrower range was silently excluding Docker-internal callers too.
+LAN_ONLY_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
 
 class CaddyService:
@@ -78,18 +81,17 @@ class CaddyService:
             match: dict[str, Any] = {"host": [domain]}
             if meta.get("lan_only"):
                 match["remote_ip"] = {"ranges": LAN_ONLY_RANGES}
-            routes.append(
-                {
-                    "match": [match],
-                    "handle": [
-                        {
-                            "handler": "reverse_proxy",
-                            "upstreams": [{"dial": f"{upstream_service}:{port}"}],
-                            "health_checks": {"passive": {"fail_duration": "30s"}},
-                        }
-                    ],
-                }
-            )
+            handler: dict[str, Any] = {
+                "handler": "reverse_proxy",
+                "upstreams": [{"dial": f"{upstream_service}:{port}"}],
+            }
+            # Opt-in per stack: ejects an upstream from rotation for 30s after
+            # a failed request. Off by default since it changes live traffic
+            # routing for every stack, not just the ones someone's watching -
+            # a single transient blip takes the backend out for 30s.
+            if meta.get("passive_health_check"):
+                handler["health_checks"] = {"passive": {"fail_duration": "30s"}}
+            routes.append({"match": [match], "handle": [handler]})
 
         if extra_routes_json:
             try:

@@ -71,7 +71,7 @@ Global settings live in `config.yaml`, generated automatically with defaults on 
 | `cloudflare_api_token` | Cloudflare API token for DNS-01 ACME challenges (Zone:Read + DNS:Edit); enables wildcard certs; leave blank for HTTP-01/TLS-ALPN-01 |
 | `wildcard_domain` | Issue one wildcard cert (`*.<domain>`) covering every stack instead of a cert per stack domain; requires `cloudflare_api_token`; leave blank for per-stack certs |
 | `theme` | `light`, `dark`, or `system` |
-| `webhook_url` | Optional webhook POSTed to when a stack becomes unhealthy or restart-loops |
+| `webhook_url` | Optional webhook POSTed to when a stack becomes unhealthy or restart-loops (`{"stack": "<name>", "health": "<state>"}`), and once a day for any TLS cert within 14 days of expiry (`{"cert_domain": "<domain>", "days_until_expiry": <int>}`) |
 
 Per-stack settings live in a `.litethaus.yaml` file inside each stack's own directory, alongside its compose file:
 

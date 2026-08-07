@@ -19,8 +19,23 @@ def test_build_config_only_includes_routable_stacks() -> None:
     assert routes[0]["handle"][0]["upstreams"] == [{"dial": "web:8080"}]
 
 
-def test_build_config_adds_passive_health_checks_to_generated_routes() -> None:
+def test_build_config_omits_passive_health_checks_by_default() -> None:
     stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 8080}, services=["web"])]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert "health_checks" not in routes[0]["handle"][0]
+
+
+def test_build_config_adds_passive_health_checks_when_opted_in() -> None:
+    stacks = [
+        Stack(
+            name="app",
+            path="x",
+            x_litethaus={"domain": "app.home.arpa", "port": 8080, "passive_health_check": True},
+            services=["web"],
+        )
+    ]
     cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
     routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
 
@@ -36,7 +51,7 @@ def test_build_config_adds_remote_ip_restriction_when_lan_only() -> None:
     routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
 
     assert routes[0]["match"] == [
-        {"host": ["app.home.arpa"], "remote_ip": {"ranges": ["10.0.0.0/8", "172.0.0.0/16", "192.168.0.0/16"]}}
+        {"host": ["app.home.arpa"], "remote_ip": {"ranges": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]}}
     ]
     assert routes[1]["match"] == [{"host": ["public.home.arpa"]}]
 
@@ -235,7 +250,8 @@ def test_build_config_omits_logs_key_by_default() -> None:
 
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
-    test_build_config_adds_passive_health_checks_to_generated_routes()
+    test_build_config_omits_passive_health_checks_by_default()
+    test_build_config_adds_passive_health_checks_when_opted_in()
     test_build_config_adds_trailing_wildcard_catchall_when_acme_and_wildcard_domain()
     test_build_config_skips_wildcard_catchall_without_wildcard_domain_or_acme()
     test_build_config_restricts_server_to_http1_only()

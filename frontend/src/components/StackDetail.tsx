@@ -37,7 +37,7 @@ interface StackDetailProps {
   onDeleted: () => void
 }
 
-const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon', 'lan_only'])
+const KNOWN_FIELDS = new Set(['domain', 'port', 'service', 'icon', 'lan_only', 'passive_health_check'])
 
 const H_HANDLE = 'mx-1 w-1 shrink-0 cursor-col-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
 const V_HANDLE = 'my-1 h-1 shrink-0 cursor-row-resize rounded bg-neutral-200 transition-colors hover:bg-neutral-400 data-[resize-handle-active]:bg-neutral-400 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:data-[resize-handle-active]:bg-neutral-600'
@@ -78,6 +78,7 @@ export function StackDetail({
   const icon = typeof meta.icon === 'string' ? meta.icon : ''
   const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? null)
   const lanOnly = Boolean(meta.lan_only)
+  const passiveHealthCheck = Boolean(meta.passive_health_check)
   const extraFields = Object.entries(meta).filter(([key]) => !KNOWN_FIELDS.has(key))
 
   const primaryContainer = containers.find((c) => c.state === 'running')?.name ?? containers[0]?.name ?? null
@@ -129,6 +130,7 @@ export function StackDetail({
     domain?: string | null
     service?: string | null
     lan_only?: boolean | null
+    passive_health_check?: boolean | null
   }) {
     setMetaError(null)
     try {
@@ -350,10 +352,23 @@ export function StackDetail({
             </dd>
           </div>
           <div>
+            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Eject on failure</dt>
+            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
+              <input
+                type="checkbox"
+                checked={passiveHealthCheck}
+                onChange={(e) => saveMetadata({ passive_health_check: e.target.checked || null })}
+                title="Take this stack's upstream out of rotation for 30s after a failed request"
+              />
+            </dd>
+          </div>
+          <div>
             <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Services</dt>
             <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{stack.services.join(', ') || '—'}</dd>
           </div>
           {(() => {
+            // First match only - if a domain briefly has two live certs (mid
+            // rotation), only one expiry shows here.
             const cert = domain ? certs.find((c) => c.domains.includes(domain)) : undefined
             if (!domain || !cert) return null
             return (
