@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { changePassword, fetchConfig, updateConfig, type Config } from '../api'
 import { setThemePreference } from '../theme'
+import { TabBar } from './TabBar'
 
 const THEME_OPTIONS = ['system', 'light', 'dark'] as const
 const HTTPS_MODE_OPTIONS = [
   { value: 'off', label: 'Off (HTTP only)' },
   { value: 'internal', label: 'Internal (self-signed, for .home.arpa/.local domains)' },
-  { value: 'acme', label: 'ACME (Let’s Encrypt, requires a public domain)' },
+  { value: 'acme', label: 'ACME (Let's Encrypt, requires a public domain)' },
 ] as const
+
+const TABS = ['General', 'Caddy', 'Cloudflare']
 
 interface FormState {
   stacks_dir: string
@@ -28,6 +31,7 @@ interface FormState {
 
 export function SettingsPage() {
   const [config, setConfig] = useState<Config | null>(null)
+  const [tab, setTab] = useState(TABS[0])
   const [form, setForm] = useState<FormState>({
     stacks_dir: '',
     project_prefix: '',
@@ -125,135 +129,204 @@ export function SettingsPage() {
 
   return (
     <div className="flex max-w-lg flex-col gap-5">
-      <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-          Stacks directory
-        </label>
-        <input
-          value={form.stacks_dir}
-          onChange={(e) => setForm((f) => ({ ...f, stacks_dir: e.target.value }))}
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        />
-      </div>
+      <TabBar items={TABS} active={tab} onSelect={setTab} />
 
-      <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-          Compose project prefix
-        </label>
-        <input
-          value={form.project_prefix}
-          onChange={(e) => setForm((f) => ({ ...f, project_prefix: e.target.value }))}
-          placeholder="e.g. dev- (optional)"
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        />
-        <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-          Prepended to every Compose project name and to the shared "litethaus" Docker network. Set
-          this if another litethaus instance runs on the same host, so the two never see or control
-          each other's containers.
-        </p>
-      </div>
-
-      <div className="flex items-start gap-2">
-        <input
-          id="caddy_enabled"
-          type="checkbox"
-          checked={form.caddy_enabled}
-          onChange={(e) => setForm((f) => ({ ...f, caddy_enabled: e.target.checked }))}
-          className="mt-0.5"
-        />
-        <label htmlFor="caddy_enabled" className="text-sm text-neutral-700 dark:text-neutral-300">
-          Use the bundled Caddy reverse proxy
-          <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-            Turn off if you front your own stacks with a different reverse proxy - litethaus
-            will stop pushing config to Caddy, and each stack's domain/port fields are ignored.
-          </p>
-        </label>
-      </div>
-
-      <div className="flex items-start gap-2">
-        <input
-          id="auto_icon_enabled"
-          type="checkbox"
-          checked={form.auto_icon_enabled}
-          onChange={(e) => setForm((f) => ({ ...f, auto_icon_enabled: e.target.checked }))}
-          className="mt-0.5"
-        />
-        <label htmlFor="auto_icon_enabled" className="text-sm text-neutral-700 dark:text-neutral-300">
-          Automatically guess stack icons
-          <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-            When a stack has no icon set, litethaus tries to match one from the dashboard-icons
-            catalog based on its image and stack name. Turn off to leave icon-less stacks alone.
-          </p>
-        </label>
-      </div>
-
-      {form.caddy_enabled && (
+      {tab === 'General' && (
         <>
           <div>
             <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-              Caddy admin URL
+              Stacks directory
             </label>
             <input
-              value={form.caddy_admin_url}
-              onChange={(e) => setForm((f) => ({ ...f, caddy_admin_url: e.target.value }))}
+              value={form.stacks_dir}
+              onChange={(e) => setForm((f) => ({ ...f, stacks_dir: e.target.value }))}
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             />
           </div>
 
           <div>
             <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-              HTTPS port
+              Compose project prefix
             </label>
             <input
-              type="number"
-              min={1}
-              max={65535}
-              value={form.https_port}
-              onChange={(e) => setForm((f) => ({ ...f, https_port: Number(e.target.value) || 443 }))}
+              value={form.project_prefix}
+              onChange={(e) => setForm((f) => ({ ...f, project_prefix: e.target.value }))}
+              placeholder="e.g. dev- (optional)"
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              External port stack links should use, e.g. 8443 if host port 443 is already taken by
-              something else. Doesn't change what Caddy binds to - just what the dashboard's "open"
-              links point at.
+              Prepended to every Compose project name and to the shared "litethaus" Docker network. Set
+              this if another litethaus instance runs on the same host, so the two never see or control
+              each other's containers.
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <input
+              id="auto_icon_enabled"
+              type="checkbox"
+              checked={form.auto_icon_enabled}
+              onChange={(e) => setForm((f) => ({ ...f, auto_icon_enabled: e.target.checked }))}
+              className="mt-0.5"
+            />
+            <label htmlFor="auto_icon_enabled" className="text-sm text-neutral-700 dark:text-neutral-300">
+              Automatically guess stack icons
+              <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                When a stack has no icon set, litethaus tries to match one from the dashboard-icons
+                catalog based on its image and stack name. Turn off to leave icon-less stacks alone.
+              </p>
+            </label>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              Health webhook URL
+            </label>
+            <input
+              value={form.webhook_url}
+              onChange={(e) => setForm((f) => ({ ...f, webhook_url: e.target.value }))}
+              placeholder="https://example.com/hooks/litethaus (optional)"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              POSTed as JSON when a stack becomes unhealthy or enters a restart loop. Leave blank to disable.
             </p>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">HTTPS</label>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">Theme</label>
             <select
-              value={form.https_mode}
-              onChange={(e) => setForm((f) => ({ ...f, https_mode: e.target.value }))}
+              value={form.theme}
+              onChange={(e) => setForm((f) => ({ ...f, theme: e.target.value }))}
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             >
-              {HTTPS_MODE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+              {THEME_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
                 </option>
               ))}
             </select>
           </div>
+
+          <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
+            <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Change password</h2>
+
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Current password"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New password (at least 8 characters)"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleChangePassword}
+                disabled={passwordSaving || !currentPassword || !newPassword}
+                className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              >
+                {passwordSaving ? 'Saving…' : 'Change password'}
+              </button>
+              {passwordSaved && <span className="text-xs text-green-600 dark:text-green-400">Password changed</span>}
+              {passwordError && <span className="text-xs text-red-600 dark:text-red-400">{passwordError}</span>}
+            </div>
+          </div>
         </>
       )}
 
-      {form.caddy_enabled && form.https_mode === 'acme' && (
-        <div>
-          <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-            ACME email
-          </label>
-          <input
-            value={form.acme_email}
-            onChange={(e) => setForm((f) => ({ ...f, acme_email: e.target.value }))}
-            placeholder="you@example.com"
-            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-          />
-        </div>
+      {tab === 'Caddy' && (
+        <>
+          <div className="flex items-start gap-2">
+            <input
+              id="caddy_enabled"
+              type="checkbox"
+              checked={form.caddy_enabled}
+              onChange={(e) => setForm((f) => ({ ...f, caddy_enabled: e.target.checked }))}
+              className="mt-0.5"
+            />
+            <label htmlFor="caddy_enabled" className="text-sm text-neutral-700 dark:text-neutral-300">
+              Use the bundled Caddy reverse proxy
+              <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                Turn off if you front your own stacks with a different reverse proxy - litethaus
+                will stop pushing config to Caddy, and each stack's domain/port fields are ignored.
+              </p>
+            </label>
+          </div>
+
+          {form.caddy_enabled && (
+            <>
+              <div>
+                <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+                  Caddy admin URL
+                </label>
+                <input
+                  value={form.caddy_admin_url}
+                  onChange={(e) => setForm((f) => ({ ...f, caddy_admin_url: e.target.value }))}
+                  className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+                  HTTPS port
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={form.https_port}
+                  onChange={(e) => setForm((f) => ({ ...f, https_port: Number(e.target.value) || 443 }))}
+                  className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                />
+                <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                  External port stack links should use, e.g. 8443 if host port 443 is already taken by
+                  something else. Doesn't change what Caddy binds to - just what the dashboard's "open"
+                  links point at.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">HTTPS</label>
+                <select
+                  value={form.https_mode}
+                  onChange={(e) => setForm((f) => ({ ...f, https_mode: e.target.value }))}
+                  className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                >
+                  {HTTPS_MODE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {form.caddy_enabled && form.https_mode === 'acme' && (
+            <div>
+              <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+                ACME email
+              </label>
+              <input
+                value={form.acme_email}
+                onChange={(e) => setForm((f) => ({ ...f, acme_email: e.target.value }))}
+                placeholder="you@example.com"
+                className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+              />
+            </div>
+          )}
+        </>
       )}
 
-      {form.caddy_enabled && (
-        <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
-          <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Cloudflare</h2>
-
+      {tab === 'Cloudflare' && (
+        <>
           <div>
             <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
               API token
@@ -282,71 +355,30 @@ export function SettingsPage() {
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              Optional, requires https_mode "acme" above. If set, issues one wildcard cert (e.g. *.example.com)
-              covering every stack instead of a cert per stack domain. Requires the API token above; leave blank
-              to keep per-stack certs.
+              Optional, requires https_mode "acme" on the Caddy tab. If set, issues one wildcard cert
+              (e.g. *.example.com) covering every stack instead of a cert per stack domain. Requires the
+              API token above; leave blank to keep per-stack certs.
             </p>
           </div>
-        </div>
+
+          <div>
+            <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
+              DDNS domains
+            </label>
+            <input
+              value={form.ddnsDomains}
+              onChange={(e) => setForm((f) => ({ ...f, ddnsDomains: e.target.value }))}
+              placeholder="example.com, other.com (optional)"
+              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              Comma-separated. Each domain must already have an A record in Cloudflare — litethaus checks
+              this host's public IP every 5 minutes and keeps each record's IP in sync, using the API
+              token above. Never creates records or touches proxy/TTL settings. Leave blank to disable.
+            </p>
+          </div>
+        </>
       )}
-
-      <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
-        <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Cloudflare DDNS</h2>
-
-        <div>
-          <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-            DDNS domains
-          </label>
-          <input
-            value={form.ddnsDomains}
-            onChange={(e) => setForm((f) => ({ ...f, ddnsDomains: e.target.value }))}
-            placeholder="example.com, other.com (optional)"
-            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-          />
-          <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-            Comma-separated. Each domain must already have an A record in Cloudflare — litethaus checks
-            this host's public IP every 5 minutes and keeps each record's IP in sync, using the Cloudflare
-            API token above. Never creates records or touches proxy/TTL settings. Leave blank to disable.
-            {!form.caddy_enabled && (
-              <>
-                {' '}
-                Requires a Cloudflare API token — enable the bundled Caddy proxy above to set one, or set
-                cloudflare_api_token directly in config.yaml.
-              </>
-            )}
-          </p>
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">
-          Health webhook URL
-        </label>
-        <input
-          value={form.webhook_url}
-          onChange={(e) => setForm((f) => ({ ...f, webhook_url: e.target.value }))}
-          placeholder="https://example.com/hooks/litethaus (optional)"
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        />
-        <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-          POSTed as JSON when a stack becomes unhealthy or enters a restart loop. Leave blank to disable.
-        </p>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs uppercase text-neutral-400 dark:text-neutral-500">Theme</label>
-        <select
-          value={form.theme}
-          onChange={(e) => setForm((f) => ({ ...f, theme: e.target.value }))}
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        >
-          {THEME_OPTIONS.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div className="flex items-center gap-3">
         <button
@@ -358,37 +390,6 @@ export function SettingsPage() {
         </button>
         {saved && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
         {saveError && <span className="text-xs text-red-600 dark:text-red-400">{saveError}</span>}
-      </div>
-
-      <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800">
-        <h2 className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Change password</h2>
-
-        <input
-          type="password"
-          value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
-          placeholder="Current password"
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        />
-        <input
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          placeholder="New password (at least 8 characters)"
-          className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        />
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleChangePassword}
-            disabled={passwordSaving || !currentPassword || !newPassword}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
-          >
-            {passwordSaving ? 'Saving…' : 'Change password'}
-          </button>
-          {passwordSaved && <span className="text-xs text-green-600 dark:text-green-400">Password changed</span>}
-          {passwordError && <span className="text-xs text-red-600 dark:text-red-400">{passwordError}</span>}
-        </div>
       </div>
     </div>
   )
