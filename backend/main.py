@@ -20,12 +20,13 @@ from health_service import health_service
 from stacks_service import stack_service
 from terminal_service import terminal_service
 
-# The dashboard polls GET /stacks/{name}/status per stack every 5s (see
-# STATUS_POLL_MS in App.tsx) - with dozens of stacks that's a continuous
-# flood in `docker logs`, drowning out anything that actually matters.
-# Same deal for /health (hit repeatedly by curl/monitoring). Root-caused
-# once here rather than special-cased per route.
-_NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks/[^/ ]+/status|/health) HTTP')
+# The dashboard's poll loop (STATUS_POLL_MS in App.tsx, every 5s) hits both
+# GET /stacks (the list) and GET /stacks/{name}/status (per stack) on every
+# tick - with dozens of stacks that's a continuous flood in `docker logs`,
+# drowning out anything that actually matters. Same deal for /health (hit
+# repeatedly by curl/monitoring). Root-caused once here rather than
+# special-cased per route.
+_NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks(?:/[^/ ]+/status)?|/health)(?:\?[^ ]*)? HTTP')
 
 
 class _SuppressPollingAccessLogs(logging.Filter):

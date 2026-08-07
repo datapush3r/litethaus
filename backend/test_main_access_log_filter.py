@@ -18,14 +18,15 @@ def _record(method: str, path: str) -> logging.LogRecord:
 
 
 def test_suppresses_status_polling_and_health() -> None:
+    assert _FILTER.filter(_record("GET", "/stacks")) is False
     assert _FILTER.filter(_record("GET", "/stacks/foo/status")) is False
     assert _FILTER.filter(_record("GET", "/health")) is False
 
 
 def test_keeps_real_traffic() -> None:
-    assert _FILTER.filter(_record("GET", "/stacks")) is True
     assert _FILTER.filter(_record("POST", "/stacks/foo/up")) is True
     assert _FILTER.filter(_record("GET", "/stacks/foo/health-log")) is True
+    assert _FILTER.filter(_record("DELETE", "/stacks/foo")) is True
 
 
 if __name__ == "__main__":
