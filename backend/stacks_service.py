@@ -108,11 +108,19 @@ class StackService:
         for entry in sorted(stacks_dir.iterdir()):
             if not entry.is_dir():
                 continue
-            compose_paths = self._find_compose_files(entry)
-            if not compose_paths:
-                continue
-            override_path = self._find_override_file(entry, compose_paths[0].name)
-            stacks[entry.name] = self._parse(entry.name, compose_paths, override_path)
+            try:
+                compose_paths = self._find_compose_files(entry)
+                if not compose_paths:
+                    continue
+                override_path = self._find_override_file(entry, compose_paths[0].name)
+                stacks[entry.name] = self._parse(entry.name, compose_paths, override_path)
+            except OSError:
+                # A dir under stacks_dir this process can't read (permission
+                # bits, unrelated ownership, an unmounted NFS path, etc.) -
+                # same "never crashes the scan or the app" contract as a
+                # broken compose file, just one level earlier. Skip it and
+                # keep scanning the rest.
+                logger.warning("Skipping unreadable stack dir %s", entry, exc_info=True)
 
         for stack in stacks.values():
             self._backfill_icon(stack)

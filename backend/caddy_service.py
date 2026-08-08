@@ -65,6 +65,7 @@ class CaddyService:
         wildcard_domain: str = "",
         extra_routes_json: str = "",
         access_log_enabled: bool = False,
+        security_headers_enabled: bool = False,
     ) -> dict[str, Any]:
         routes = []
         domains = []
@@ -91,7 +92,25 @@ class CaddyService:
             # a single transient blip takes the backend out for 30s.
             if meta.get("passive_health_check"):
                 handler["health_checks"] = {"passive": {"fail_duration": "30s"}}
-            routes.append({"match": [match], "handle": [handler]})
+            handle: list[dict[str, Any]] = []
+            if security_headers_enabled:
+                # Caddy's "headers" handler defers its response header ops
+                # until the response is actually written, so it works
+                # correctly listed before reverse_proxy in the chain - same
+                # as Caddyfile's `header` directive, order-independent.
+                # X-Frame-Options is SAMEORIGIN rather than DENY because
+                # some self-hosted dashboards embed each other in iframes;
+                # opt-in and off by default for the same reason.
+                header_set: dict[str, list[str]] = {
+                    "X-Content-Type-Options": ["nosniff"],
+                    "X-Frame-Options": ["SAMEORIGIN"],
+                    "Referrer-Policy": ["strict-origin-when-cross-origin"],
+                }
+                if https_mode != "off":
+                    header_set["Strict-Transport-Security"] = ["max-age=31536000; includeSubDomains"]
+                handle.append({"handler": "headers", "response": {"set": header_set}})
+            handle.append(handler)
+            routes.append({"match": [match], "handle": handle})
 
         if extra_routes_json:
             try:
@@ -195,6 +214,7 @@ class CaddyService:
             wildcard_domain=cfg.get("wildcard_domain", ""),
             extra_routes_json=cfg.get("caddy_extra_routes_json", ""),
             access_log_enabled=cfg.get("caddy_access_log_enabled", False),
+            security_headers_enabled=cfg.get("caddy_security_headers_enabled", False),
         )
         req = urllib.request.Request(
             f"{self.admin_url}/load",

@@ -38,6 +38,29 @@ def test_scan_parses_metadata_and_isolates_errors() -> None:
         assert stacks["broken"].error is not None
 
 
+def test_scan_skips_unreadable_dir_instead_of_crashing() -> None:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
+        stacks_dir = Path(tmp)
+
+        good = stacks_dir / "example"
+        good.mkdir()
+        (good / "docker-compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
+
+        # e.g. an unrelated directory under stacks_dir this process has no
+        # permission to even stat() into - same crash cap_drop: ALL exposed
+        # in production by stripping root's CAP_DAC_OVERRIDE.
+        unreadable = stacks_dir / "unreadable"
+        unreadable.mkdir(mode=0o000)
+        try:
+            svc = StackService(stacks_dir=stacks_dir)
+            stacks = {s.name: s for s in svc.scan()}
+        finally:
+            unreadable.chmod(0o700)  # let TemporaryDirectory clean up
+
+        assert "unreadable" not in stacks
+        assert stacks["example"].error is None
+
+
 def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -> None:
     with tempfile.TemporaryDirectory() as tmp, NO_ICON:
         stacks_dir = Path(tmp)
@@ -340,6 +363,7 @@ def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
 
 if __name__ == "__main__":
     test_scan_parses_metadata_and_isolates_errors()
+    test_scan_skips_unreadable_dir_instead_of_crashing()
     test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order()
     test_override_file_is_detected_and_ordered_right_after_the_primary_file()
     test_multiple_compose_files_are_each_independently_readable_and_writable()

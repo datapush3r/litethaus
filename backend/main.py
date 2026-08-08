@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSoc
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from auth_service import SESSION_COOKIE, SESSION_TTL_SECONDS, auth_service
+from auth_service import SESSION_COOKIE, SESSION_TTL_SECONDS, LockedOutError, auth_service
 from caddy_service import caddy_service
 from cert_service import cert_service
 from config_service import config_service
@@ -102,9 +102,20 @@ async def enforce_auth(request: Request, call_next):
     return await call_next(request)
 
 
-def _set_session_cookie(response: Response) -> None:
+def _set_session_cookie(request: Request, response: Response) -> None:
+    # Litehaus itself may be reached directly over HTTP (e.g. :8000 on the
+    # LAN) or via a TLS-terminating proxy in front of it - mark the cookie
+    # Secure whenever *this* request arrived over HTTPS, either directly or
+    # per the proxy's X-Forwarded-Proto, rather than hardcoding it to a
+    # config toggle that could drift from reality.
+    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     response.set_cookie(
-        SESSION_COOKIE, auth_service.create_session(), httponly=True, samesite="lax", max_age=SESSION_TTL_SECONDS
+        SESSION_COOKIE,
+        auth_service.create_session(),
+        httponly=True,
+        samesite="lax",
+        max_age=SESSION_TTL_SECONDS,
+        secure=secure,
     )
 
 
@@ -123,20 +134,25 @@ def auth_status(request: Request) -> dict[str, bool]:
 
 
 @app.post("/auth/setup")
-def auth_setup(body: dict[str, Any], response: Response) -> dict[str, bool]:
+def auth_setup(body: dict[str, Any], request: Request, response: Response) -> dict[str, bool]:
     try:
         auth_service.setup(str(body.get("username", "")), str(body.get("password", "")))
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    _set_session_cookie(response)
+    _set_session_cookie(request, response)
     return {"ok": True}
 
 
 @app.post("/auth/login")
-def auth_login(body: dict[str, Any], response: Response) -> dict[str, bool]:
-    if not auth_service.verify_login(str(body.get("username", "")), str(body.get("password", ""))):
+def auth_login(body: dict[str, Any], request: Request, response: Response) -> dict[str, bool]:
+    remote_addr = request.client.host if request.client else "unknown"
+    try:
+        ok = auth_service.verify_login(str(body.get("username", "")), str(body.get("password", "")), remote_addr)
+    except LockedOutError as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    if not ok:
         raise HTTPException(status_code=401, detail="invalid username or password")
-    _set_session_cookie(response)
+    _set_session_cookie(request, response)
     return {"ok": True}
 
 
@@ -173,6 +189,7 @@ CADDY_RELEVANT_KEYS = {
     "caddy_enabled",
     "caddy_extra_routes_json",
     "caddy_access_log_enabled",
+    "caddy_security_headers_enabled",
 }
 
 
@@ -232,6 +249,7 @@ def caddy_config() -> dict[str, Any]:
         wildcard_domain=cfg.get("wildcard_domain", ""),
         extra_routes_json=cfg.get("caddy_extra_routes_json", ""),
         access_log_enabled=cfg.get("caddy_access_log_enabled", False),
+        security_headers_enabled=cfg.get("caddy_security_headers_enabled", False),
     )
     return _redact_secrets(config)
 

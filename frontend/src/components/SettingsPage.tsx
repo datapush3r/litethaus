@@ -21,6 +21,7 @@ interface FormState {
   caddy_admin_url: string
   https_port: number
   https_mode: string
+  caddy_security_headers_enabled: boolean
   acme_email: string
   cloudflare_api_token: string
   wildcard_domain: string
@@ -41,6 +42,7 @@ export function SettingsPage() {
     caddy_admin_url: '',
     https_port: 443,
     https_mode: 'off',
+    caddy_security_headers_enabled: false,
     acme_email: '',
     cloudflare_api_token: '',
     wildcard_domain: '',
@@ -72,6 +74,7 @@ export function SettingsPage() {
           caddy_admin_url: String(cfg.caddy_admin_url ?? ''),
           https_port: Number(cfg.https_port ?? 443),
           https_mode: String(cfg.https_mode ?? 'off'),
+          caddy_security_headers_enabled: Boolean(cfg.caddy_security_headers_enabled ?? false),
           acme_email: String(cfg.acme_email ?? ''),
           cloudflare_api_token: String(cfg.cloudflare_api_token ?? ''),
           wildcard_domain: String(cfg.wildcard_domain ?? ''),
@@ -324,6 +327,24 @@ export function SettingsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="flex items-start gap-2">
+                <input
+                  id="caddy_security_headers_enabled"
+                  type="checkbox"
+                  checked={form.caddy_security_headers_enabled}
+                  onChange={(e) => setForm((f) => ({ ...f, caddy_security_headers_enabled: e.target.checked }))}
+                  className="mt-0.5"
+                />
+                <label htmlFor="caddy_security_headers_enabled" className="text-sm text-neutral-700 dark:text-neutral-300">
+                  Add hardening response headers
+                  <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                    Adds X-Content-Type-Options, X-Frame-Options: SAMEORIGIN, Referrer-Policy, and (when HTTPS is on)
+                    Strict-Transport-Security to every stack route. Off by default - some self-hosted apps embed
+                    each other in iframes and would break under X-Frame-Options.
+                  </p>
+                </label>
               </div>
             </>
           )}

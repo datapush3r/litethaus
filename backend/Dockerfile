@@ -17,6 +17,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
     && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
+# Stays root (unlike caddy/Dockerfile's non-root user) - this container is
+# handed /var/run/docker.sock, and socket access is root-equivalent on the
+# host regardless of the container's own UID. A non-root UID here would need
+# to match the host docker group's GID (host-specific, breaks across
+# machines) without adding any real isolation, since the socket itself is
+# the actual privilege boundary. Hardened instead at the compose level:
+# read-only rootfs, cap_drop: ALL, no-new-privileges.
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .

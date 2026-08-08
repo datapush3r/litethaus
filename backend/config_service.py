@@ -90,6 +90,13 @@ caddy_container_name: ""
 # default - noisy for a home reverse proxy unless you're debugging routing.
 caddy_access_log_enabled: false
 
+# Whether Caddy adds hardening response headers (X-Content-Type-Options,
+# X-Frame-Options: SAMEORIGIN, Referrer-Policy, and Strict-Transport-Security
+# when https_mode isn't "off") to every stack route. Off by default - some
+# self-hosted apps embed each other in iframes and would break under
+# X-Frame-Options, so this is opt-in rather than forced on everyone.
+caddy_security_headers_enabled: false
+
 # UI theme: "light", "dark", or "system"
 theme: system
 

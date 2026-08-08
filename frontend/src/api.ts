@@ -147,6 +147,7 @@ export interface Config {
   ddns_domains: string[]
   caddy_extra_routes_json: string
   caddy_access_log_enabled: boolean
+  caddy_security_headers_enabled: boolean
   caddy_container_name: string
   theme: string
   webhook_url: string

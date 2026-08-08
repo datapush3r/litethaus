@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 
-from auth_service import AuthService
+from auth_service import MAX_LOGIN_ATTEMPTS, AuthService, LockedOutError
 from config_service import ConfigService
 
 
@@ -75,10 +75,55 @@ def test_session_lifecycle() -> None:
     assert svc.is_valid_session(token) is False
 
 
+def test_repeated_failed_logins_lock_out_that_address() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = _svc(tmp)
+        svc.setup("admin", "correct horse battery staple")
+
+        for _ in range(MAX_LOGIN_ATTEMPTS):
+            assert svc.verify_login("admin", "wrong password", "1.2.3.4") is False
+
+        try:
+            svc.verify_login("admin", "correct horse battery staple", "1.2.3.4")
+            assert False, "expected the correct password to still be locked out"
+        except LockedOutError:
+            pass
+
+
+def test_lockout_is_scoped_per_remote_addr() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = _svc(tmp)
+        svc.setup("admin", "correct horse battery staple")
+
+        for _ in range(MAX_LOGIN_ATTEMPTS):
+            svc.verify_login("admin", "wrong password", "1.2.3.4")
+
+        # a different address is unaffected by 1.2.3.4's lockout
+        assert svc.verify_login("admin", "correct horse battery staple", "5.6.7.8") is True
+
+
+def test_successful_login_clears_failed_attempt_counter() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        svc = _svc(tmp)
+        svc.setup("admin", "correct horse battery staple")
+
+        svc.verify_login("admin", "wrong password", "1.2.3.4")
+        assert svc.verify_login("admin", "correct horse battery staple", "1.2.3.4") is True
+
+        # the earlier failure was cleared, so a fresh run of failures still
+        # takes MAX_LOGIN_ATTEMPTS tries to lock out again
+        for _ in range(MAX_LOGIN_ATTEMPTS - 1):
+            assert svc.verify_login("admin", "wrong password", "1.2.3.4") is False
+        assert svc.verify_login("admin", "correct horse battery staple", "1.2.3.4") is True
+
+
 if __name__ == "__main__":
     test_setup_login_and_reject_second_setup()
     test_setup_rejects_short_password()
     test_change_password_requires_current_password()
     test_enabled_defaults_true_and_respects_config()
     test_session_lifecycle()
+    test_repeated_failed_logins_lock_out_that_address()
+    test_lockout_is_scoped_per_remote_addr()
+    test_successful_login_clears_failed_attempt_counter()
     print("ok")

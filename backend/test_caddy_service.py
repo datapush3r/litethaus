@@ -248,6 +248,49 @@ def test_build_config_omits_logs_key_by_default() -> None:
     assert "logs" not in cfg["apps"]["http"]["servers"]["litethaus"]
 
 
+def test_build_config_omits_security_headers_by_default() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 80}, services=["web"])]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert len(routes[0]["handle"]) == 1
+    assert routes[0]["handle"][0]["handler"] == "reverse_proxy"
+
+
+def test_build_config_adds_security_headers_when_opted_in() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 80}, services=["web"])]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks, security_headers_enabled=True)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert routes[0]["handle"][0] == {
+        "handler": "headers",
+        "response": {
+            "set": {
+                "X-Content-Type-Options": ["nosniff"],
+                "X-Frame-Options": ["SAMEORIGIN"],
+                "Referrer-Policy": ["strict-origin-when-cross-origin"],
+            }
+        },
+    }
+    assert routes[0]["handle"][1]["handler"] == "reverse_proxy"
+
+
+def test_build_config_security_headers_add_hsts_only_when_https_on() -> None:
+    stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 80}, services=["web"])]
+
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks, security_headers_enabled=True, https_mode="off")
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+    assert "Strict-Transport-Security" not in routes[0]["handle"][0]["response"]["set"]
+
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(
+        stacks, security_headers_enabled=True, https_mode="internal"
+    )
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+    assert routes[0]["handle"][0]["response"]["set"]["Strict-Transport-Security"] == [
+        "max-age=31536000; includeSubDomains"
+    ]
+
+
 if __name__ == "__main__":
     test_build_config_only_includes_routable_stacks()
     test_build_config_omits_passive_health_checks_by_default()
@@ -274,4 +317,7 @@ if __name__ == "__main__":
     test_version_returns_none_when_container_not_found()
     test_build_config_adds_logs_key_when_access_log_enabled()
     test_build_config_omits_logs_key_by_default()
+    test_build_config_omits_security_headers_by_default()
+    test_build_config_adds_security_headers_when_opted_in()
+    test_build_config_security_headers_add_hsts_only_when_https_on()
     print("ok")
