@@ -75,7 +75,7 @@ export function StackCard({
         disabled={busy || !!stack.error}
         className={`rounded border border-neutral-300 px-2 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800 ${fullWidth ? 'w-full' : 'shrink-0'}`}
       >
-        {status === 'running' ? 'Stop' : 'Start'}
+        {status !== 'stopped' ? 'Stop' : 'Start'}
       </button>
     )
   }

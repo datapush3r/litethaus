@@ -192,8 +192,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   }
 
   function handleToggle(stack: Stack) {
-    const running = statuses[stack.name] === 'running'
-    return runAction(stack, running ? stackDown : stackUp)
+    const isUp = statuses[stack.name] !== 'stopped'
+    return runAction(stack, isUp ? stackDown : stackUp)
   }
 
   function handleRestart(stack: Stack) {
