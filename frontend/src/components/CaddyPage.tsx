@@ -12,6 +12,7 @@ import {
   type Stack,
 } from '../api'
 import { CaddyCertificatesTab } from './CaddyCertificatesTab'
+import { CaddyCustomRoutesTab } from './CaddyCustomRoutesTab'
 import { CaddyLogsTab } from './CaddyLogsTab'
 import { CaddyRoutesTab } from './CaddyRoutesTab'
 import { JsonEditor } from './JsonEditor'
@@ -51,7 +52,7 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
   const [savingExtraRoutes, setSavingExtraRoutes] = useState(false)
   const [extraRoutesSaved, setExtraRoutesSaved] = useState(false)
 
-  const TABS = ['Overview', 'Routes', 'TLS Certificates', 'Access Logs', 'Advanced']
+  const TABS = ['Overview', 'Stack Routes', 'Custom Routes', 'TLS Certificates', 'Access Logs', 'Advanced']
   const [tab, setTab] = useState(TABS[0])
 
   function loadStatus() {
@@ -238,9 +239,19 @@ export function CaddyPage({ stacks, onStacksChanged }: CaddyPageProps) {
         </div>
       )}
 
-      {tab === 'Routes' && (
+      {tab === 'Stack Routes' && (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <CaddyRoutesTab stacks={stacks} onStacksChanged={onRowSaved} />
+        </div>
+      )}
+      {tab === 'Custom Routes' && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <CaddyCustomRoutesTab
+            onSaved={() => {
+              loadStatus()
+              loadConfig()
+            }}
+          />
         </div>
       )}
       {tab === 'TLS Certificates' && (
