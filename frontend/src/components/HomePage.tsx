@@ -1,5 +1,5 @@
 import { ExternalLink, PackageOpen } from 'lucide-react'
-import { stackUrl, type Stack, type StackState } from '../api'
+import { domainList, stackUrl, type Stack, type StackState } from '../api'
 import { StackIcon } from './StackIcon'
 
 interface HomePageProps {
@@ -28,15 +28,18 @@ export function buildHomeEntries(
   for (const stack of stacks) {
     if (stack.error) continue
     if (statuses[stack.name] === 'stopped') continue
-    const domain = stack.x_litethaus.domain
-    if (typeof domain !== 'string' || !domain) continue
-    entries.push({
-      key: `stack:${stack.name}`,
-      name: stack.name,
-      domain,
-      icon: stack.x_litethaus.icon,
-      url: stackUrl(domain, httpsPort),
-    })
+    // One row per domain - a stack with multiple hostnames (e.g. a short
+    // alias alongside the full name) gets one launcher entry each, since
+    // every domain is an independently working way to reach it.
+    for (const domain of domainList(stack.x_litethaus.domain)) {
+      entries.push({
+        key: `stack:${stack.name}:${domain}`,
+        name: stack.name,
+        domain,
+        icon: stack.x_litethaus.icon,
+        url: stackUrl(domain, httpsPort),
+      })
+    }
   }
 
   for (const domain of extractExtraRouteHosts(extraRoutesJson)) {

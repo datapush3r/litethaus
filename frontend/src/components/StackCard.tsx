@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Download, Play, RotateCw, Square, Star, Trash2 } from 'lucide-react'
-import { deleteStack, stackUrl, type HealthState, type Stack, type StackState } from '../api'
+import { deleteStack, domainList, stackUrl, type HealthState, type Stack, type StackState } from '../api'
 import { BAD_HEALTH, STATUS_BADGE } from '../statusStyles'
 import { DomainLink } from './DomainLink'
 import { StackIcon } from './StackIcon'
@@ -37,7 +37,10 @@ export function StackCard({
   onDeleted,
 }: StackCardProps) {
   const [deleting, setDeleting] = useState(false)
-  const domain = typeof stack.x_litethaus.domain === 'string' ? stack.x_litethaus.domain : null
+  // Card space is tight (grid tiles especially) - show only the primary
+  // (first-listed) domain here; the full list is editable on the stack's
+  // detail page, and the homepage launcher lists every domain separately.
+  const domain = domainList(stack.x_litethaus.domain)[0] ?? null
 
   async function handleDelete() {
     if (!confirm(`Delete stack "${stack.name}"? This removes its directory from disk.`)) return

@@ -18,6 +18,18 @@ logger = logging.getLogger(__name__)
 LAN_ONLY_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
 
+def _domain_list(domain: Any) -> list[str]:
+    # A stack's `domain` metadata is a plain string for the common
+    # single-domain case (unchanged on-disk format for existing sidecars),
+    # or a list of strings once a stack is given more than one hostname
+    # (e.g. "frigate.example.com" + "f.example.com" for the same upstream).
+    if isinstance(domain, str):
+        return [domain] if domain else []
+    if isinstance(domain, list):
+        return [d for d in domain if isinstance(d, str) and d]
+    return []
+
+
 class CaddyService:
     def __init__(self, admin_url: str | None = None) -> None:
         self._admin_url_override = admin_url
@@ -73,13 +85,13 @@ class CaddyService:
             if stack.error:
                 continue
             meta = stack.x_litethaus
-            domain = meta.get("domain")
+            stack_domains = _domain_list(meta.get("domain"))
             port = meta.get("port")
-            if not domain or not port:
+            if not stack_domains or not port:
                 continue
-            domains.append(domain)
+            domains.extend(stack_domains)
             upstream_service = meta.get("service") or (stack.services[0] if stack.services else stack.name)
-            match: dict[str, Any] = {"host": [domain]}
+            match: dict[str, Any] = {"host": stack_domains}
             if meta.get("lan_only"):
                 match["remote_ip"] = {"ranges": LAN_ONLY_RANGES}
             handler: dict[str, Any] = {

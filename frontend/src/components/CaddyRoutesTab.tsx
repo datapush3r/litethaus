@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchCaddyUpstreams, updateStackMetadata, type CaddyUpstream, type Stack } from '../api'
+import { domainList, domainPatchValue, fetchCaddyUpstreams, updateStackMetadata, type CaddyUpstream, type Stack } from '../api'
 
 interface CaddyRoutesTabProps {
   stacks: Stack[]
@@ -72,24 +72,25 @@ function RouteRow({
   onSaved: () => void
 }) {
   const meta = stack.x_litethaus
-  const domain = typeof meta.domain === 'string' ? meta.domain : null
+  const domains = domainList(meta.domain)
+  const domainsText = domains.join(', ')
   const port = meta.port != null ? String(meta.port) : null
   const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? '')
   const lanOnly = Boolean(meta.lan_only)
 
-  const [domainDraft, setDomainDraft] = useState(domain ?? '')
+  const [domainDraft, setDomainDraft] = useState(domainsText)
   const [portDraft, setPortDraft] = useState(port ?? '')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setDomainDraft(domain ?? '')
+    setDomainDraft(domainsText)
     setPortDraft(port ?? '')
     setError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stack.name, domain, port])
+  }, [stack.name, domainsText, port])
 
   async function save(patch: {
-    domain?: string | null
+    domain?: string | string[] | null
     port?: number | null
     service?: string | null
     lan_only?: boolean | null
@@ -104,9 +105,8 @@ function RouteRow({
   }
 
   function handleDomainBlur() {
-    const next = domainDraft.trim()
-    if (next === (domain ?? '')) return
-    save({ domain: next || null })
+    if (domainDraft.trim() === domainsText) return
+    save({ domain: domainPatchValue(domainDraft) })
   }
 
   function handlePortBlur() {
@@ -136,7 +136,7 @@ function RouteRow({
           value={domainDraft}
           onChange={(e) => setDomainDraft(e.target.value)}
           onBlur={handleDomainBlur}
-          placeholder="not proxied"
+          placeholder="not proxied (comma-separate for multiple)"
           className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-900 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
       </td>
@@ -172,7 +172,7 @@ function RouteRow({
         />
       </td>
       <td className="px-3 py-1.5">
-        {!domain ? (
+        {domains.length === 0 ? (
           <span className="text-neutral-400 dark:text-neutral-500">—</span>
         ) : !upstream ? (
           <span className="text-neutral-400 dark:text-neutral-500">no traffic yet</span>

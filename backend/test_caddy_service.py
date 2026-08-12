@@ -19,6 +19,23 @@ def test_build_config_only_includes_routable_stacks() -> None:
     assert routes[0]["handle"][0]["upstreams"] == [{"dial": "web:8080"}]
 
 
+def test_build_config_multi_domain_stack_matches_every_hostname() -> None:
+    stacks = [
+        Stack(
+            name="frigate",
+            path="x",
+            x_litethaus={"domain": ["frigate.example.com", "f.example.com"], "port": 5000},
+            services=["web"],
+        )
+    ]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
+    routes = cfg["apps"]["http"]["servers"]["litethaus"]["routes"]
+
+    assert len(routes) == 1
+    assert routes[0]["match"] == [{"host": ["frigate.example.com", "f.example.com"]}]
+    assert routes[0]["handle"][0]["upstreams"] == [{"dial": "web:5000"}]
+
+
 def test_build_config_omits_passive_health_checks_by_default() -> None:
     stacks = [Stack(name="app", path="x", x_litethaus={"domain": "app.home.arpa", "port": 8080}, services=["web"])]
     cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks)
@@ -125,6 +142,21 @@ def test_build_config_internal_https_lists_domains_with_internal_issuer() -> Non
     policy = cfg["apps"]["tls"]["automation"]["policies"][0]
     assert policy["subjects"] == ["app.home.arpa"]
     assert policy["issuers"] == [{"module": "internal"}]
+
+
+def test_build_config_internal_https_lists_every_domain_of_a_multi_domain_stack() -> None:
+    stacks = [
+        Stack(
+            name="frigate",
+            path="x",
+            x_litethaus={"domain": ["frigate.home.arpa", "f.home.arpa"], "port": 5000},
+            services=["web"],
+        ),
+    ]
+    cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks, https_mode="internal")
+
+    policy = cfg["apps"]["tls"]["automation"]["policies"][0]
+    assert policy["subjects"] == ["frigate.home.arpa", "f.home.arpa"]
 
 
 def test_build_config_acme_https_uses_configured_email() -> None:

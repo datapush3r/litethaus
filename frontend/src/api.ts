@@ -103,7 +103,7 @@ export async function updateStackMetadata(
   patch: {
     icon?: string | null
     port?: number | null
-    domain?: string | null
+    domain?: string | string[] | null
     service?: string | null
     favorite?: boolean | null
     lan_only?: boolean | null
@@ -157,6 +157,30 @@ export interface Config {
 
 export function stackUrl(domain: string, httpsPort: number): string {
   return httpsPort === 443 ? `https://${domain}` : `https://${domain}:${httpsPort}`
+}
+
+// A stack's x_litethaus.domain is a plain string for the common single-domain
+// case, or a list of strings once given more than one hostname for the same
+// upstream (e.g. "frigate.example.com" + "f.example.com"). Mirrors the
+// backend's _domain_list in caddy_service.py.
+export function domainList(domain: unknown): string[] {
+  if (typeof domain === 'string') return domain ? [domain] : []
+  if (Array.isArray(domain)) return domain.filter((d): d is string => typeof d === 'string' && !!d)
+  return []
+}
+
+// Turns a comma-separated domain input's raw text into the value to PATCH
+// /stacks/{name}/metadata with: null clears the field, a single hostname
+// stays a plain string (unchanged on-disk format for the common case), more
+// than one becomes a list. Mirrors the read side's domainList().
+export function domainPatchValue(text: string): string[] | string | null {
+  const domains = text
+    .split(',')
+    .map((d) => d.trim())
+    .filter(Boolean)
+  if (domains.length === 0) return null
+  if (domains.length === 1) return domains[0]
+  return domains
 }
 
 export async function fetchConfig(): Promise<Config> {

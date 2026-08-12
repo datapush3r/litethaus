@@ -3,6 +3,8 @@ import { AlertTriangle, ExternalLink } from 'lucide-react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
   deleteStack,
+  domainList,
+  domainPatchValue,
   fetchCaddyCertificates,
   fetchHealthLog,
   fetchStackRaw,
@@ -76,7 +78,8 @@ export function StackDetail({
   const [certs, setCerts] = useState<CaddyCertificate[]>([])
 
   const meta = stack.x_litethaus
-  const domain = typeof meta.domain === 'string' ? meta.domain : null
+  const domains = domainList(meta.domain)
+  const primaryDomain = domains[0] ?? null
   const port = meta.port != null ? String(meta.port) : null
   const icon = typeof meta.icon === 'string' ? meta.icon : ''
   const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? null)
@@ -130,7 +133,7 @@ export function StackDetail({
   }, [stack.name, effectiveFile])
 
   useEffect(() => {
-    setDomainDraft(domain ?? '')
+    setDomainDraft(domains.join(', '))
     setPortDraft(port ?? '')
     setMetaError(null)
     setIconPickerOpen(false)
@@ -146,7 +149,7 @@ export function StackDetail({
   async function saveMetadata(patch: {
     icon?: string | null
     port?: number | null
-    domain?: string | null
+    domain?: string | string[] | null
     service?: string | null
     lan_only?: boolean | null
     passive_health_check?: boolean | null
@@ -167,9 +170,8 @@ export function StackDetail({
   }
 
   function handleDomainBlur() {
-    const next = domainDraft.trim()
-    if (next === (domain ?? '')) return
-    saveMetadata({ domain: next || null })
+    if (domainDraft.trim() === domains.join(', ')) return
+    saveMetadata({ domain: domainPatchValue(domainDraft) })
   }
 
   function handlePortBlur() {
@@ -314,14 +316,16 @@ export function StackDetail({
                 value={domainDraft}
                 onChange={(e) => setDomainDraft(e.target.value)}
                 onBlur={handleDomainBlur}
-                placeholder="not set"
+                placeholder="not set (comma-separate for multiple)"
+                title="Comma-separate multiple hostnames for the same upstream, e.g. frigate.example.com, f.example.com"
                 className="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 outline-none placeholder:text-neutral-400 hover:border-neutral-300 focus:border-neutral-400 dark:placeholder:text-neutral-600 dark:hover:border-neutral-700 dark:focus:border-neutral-600"
               />
-              {domain && (
+              {primaryDomain && (
                 <a
-                  href={stackUrl(domain, httpsPort)}
+                  href={stackUrl(primaryDomain, httpsPort)}
                   target="_blank"
                   rel="noreferrer"
+                  title={`Open ${primaryDomain}`}
                   className="shrink-0 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
                 >
                   <ExternalLink size={12} />
@@ -386,10 +390,11 @@ export function StackDetail({
             <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{stack.services.join(', ') || '—'}</dd>
           </div>
           {(() => {
-            // First match only - if a domain briefly has two live certs (mid
-            // rotation), only one expiry shows here.
-            const cert = domain ? certs.find((c) => c.domains.includes(domain)) : undefined
-            if (!domain || !cert) return null
+            // Primary domain only - if a domain briefly has two live certs
+            // (mid rotation), or a stack has multiple domains, only one
+            // expiry shows here.
+            const cert = primaryDomain ? certs.find((c) => c.domains.includes(primaryDomain)) : undefined
+            if (!primaryDomain || !cert) return null
             return (
               <div>
                 <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Cert expires</dt>
