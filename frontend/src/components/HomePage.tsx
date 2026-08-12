@@ -1,6 +1,5 @@
-import { PackageOpen } from 'lucide-react'
+import { ExternalLink, PackageOpen } from 'lucide-react'
 import { stackUrl, type Stack, type StackState } from '../api'
-import { DomainLink } from './DomainLink'
 import { StackIcon } from './StackIcon'
 
 interface HomePageProps {
@@ -70,7 +69,7 @@ function extractExtraRouteHosts(extraRoutesJson: string): string[] {
       const hostList = (matcher as { host?: unknown } | null)?.host
       if (!Array.isArray(hostList)) continue
       for (const host of hostList) {
-        if (typeof host === 'string' && host) hosts.add(host)
+        if (typeof host === 'string' && host && !host.includes('*')) hosts.add(host)
       }
     }
   }
@@ -92,16 +91,20 @@ export function HomePage({ stacks, statuses, extraRoutesJson, httpsPort }: HomeP
   return (
     <div className="flex flex-col gap-2">
       {entries.map((entry) => (
-        <div
+        <a
           key={entry.key}
-          className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 dark:border-neutral-800 dark:bg-neutral-900"
+          href={entry.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
         >
           <StackIcon icon={entry.icon} size={22} />
           {entry.name && <span className="font-medium text-neutral-900 dark:text-neutral-100">{entry.name}</span>}
-          <div className="ml-auto">
-            <DomainLink href={entry.url} label={entry.domain} />
-          </div>
-        </div>
+          <span className="ml-auto flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+            {entry.domain}
+            <ExternalLink size={12} />
+          </span>
+        </a>
       ))}
     </div>
   )

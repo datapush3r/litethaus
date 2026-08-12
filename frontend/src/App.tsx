@@ -117,18 +117,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     localStorage.setItem('litethaus-view', viewMode)
   }, [viewMode])
 
-  useEffect(() => {
-    fetchConfig()
-      .then((cfg) => {
-        setThemePreference(String(cfg.theme ?? 'system'))
-        setHttpsPort(Number(cfg.https_port ?? 443))
-        setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? ''))
-      })
-      .catch(() => {
-        /* fall back to whatever theme.ts's default already applied */
-      })
-  }, [])
-
   const refreshStatuses = useCallback(async (list: Stack[]) => {
     const entries = await Promise.all(
       list.filter((s) => !s.error).map(async (s) => [s.name, await fetchStatus(s.name)] as const),
@@ -161,6 +149,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         await refreshStatuses(list)
       } catch {
         if (!cancelled) setError('backend unreachable')
+      }
+
+      try {
+        const cfg = await fetchConfig()
+        if (cancelled) return
+        setThemePreference(String(cfg.theme ?? 'system'))
+        setHttpsPort(Number(cfg.https_port ?? 443))
+        setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? ''))
+      } catch {
+        /* fall back to whatever theme.ts's default already applied */
       }
     }
 
@@ -301,7 +299,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
-          {route.view === 'home' &&
+          {route.view === 'home' && error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+              <AlertTriangle size={16} />
+              {error}
+            </div>
+          )}
+
+          {route.view === 'home' && !error &&
             (stacks === null ? (
               <div className="flex items-center gap-2 text-sm text-neutral-400 dark:text-neutral-500">
                 <Loader2 size={16} className="animate-spin" />
