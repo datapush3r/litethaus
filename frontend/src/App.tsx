@@ -393,8 +393,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   layout={viewMode}
                   favorite={!!stack.x_litethaus.favorite}
                   onToggle={() => handleToggle(stack)}
+                  onRestart={() => handleRestart(stack)}
+                  onUpdate={() => handleUpdate(stack)}
                   onOpen={() => navigate({ view: 'stack', name: stack.name })}
                   onToggleFavorite={() => handleToggleFavorite(stack)}
+                  onDeleted={refreshStacks}
                 />
               ))}
             </div>
