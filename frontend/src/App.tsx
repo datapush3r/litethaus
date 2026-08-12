@@ -19,6 +19,7 @@ import {
 } from './api'
 import { AuthScreen } from './components/AuthScreen'
 import { CaddyPage } from './components/CaddyPage'
+import { HomePage } from './components/HomePage'
 import { StackCard } from './components/StackCard'
 import { StackDetail } from './components/StackDetail'
 import { StackEditor } from './components/StackEditor'
@@ -106,6 +107,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [route, navigate] = useRoute()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [httpsPort, setHttpsPort] = useState(443)
+  const [extraRoutesJson, setExtraRoutesJson] = useState('')
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(
     () => (localStorage.getItem('litethaus-view') as 'grid' | 'list' | null) ?? 'grid',
@@ -120,6 +122,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       .then((cfg) => {
         setThemePreference(String(cfg.theme ?? 'system'))
         setHttpsPort(Number(cfg.https_port ?? 443))
+        setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? ''))
       })
       .catch(() => {
         /* fall back to whatever theme.ts's default already applied */
@@ -220,13 +223,15 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const listView = route.view === 'stacks' || route.view === 'stack'
 
   const heading =
-    route.view === 'settings'
-      ? 'Settings'
-      : route.view === 'caddy'
-        ? 'Caddy'
-        : route.view === 'new'
-          ? 'New Stack'
-          : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
+    route.view === 'home'
+      ? 'Home'
+      : route.view === 'settings'
+        ? 'Settings'
+        : route.view === 'caddy'
+          ? 'Caddy'
+          : route.view === 'new'
+            ? 'New Stack'
+            : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -246,6 +251,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         route={route}
         open={sidebarOpen}
         onSelectStack={(name) => navigate(name ? { view: 'stack', name } : { view: 'stacks' })}
+        onOpenHome={() => navigate({ view: 'home' })}
         onOpenSettings={() => navigate({ view: 'settings' })}
         onOpenCaddy={() => navigate({ view: 'caddy' })}
         onNewStack={() => navigate({ view: 'new' })}
@@ -295,6 +301,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
+          {route.view === 'home' &&
+            (stacks === null ? (
+              <div className="flex items-center gap-2 text-sm text-neutral-400 dark:text-neutral-500">
+                <Loader2 size={16} className="animate-spin" />
+                Loading…
+              </div>
+            ) : (
+              <HomePage stacks={stacks} statuses={statuses} extraRoutesJson={extraRoutesJson} httpsPort={httpsPort} />
+            ))}
+
           {route.view === 'settings' && <SettingsPage />}
 
           {route.view === 'caddy' && <CaddyPage stacks={stacks ?? []} onStacksChanged={refreshStacks} />}

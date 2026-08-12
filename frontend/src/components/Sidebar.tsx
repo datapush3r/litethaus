@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
+  Home as HomeIcon,
   LogOut,
   Plus,
   Settings as SettingsIcon,
@@ -26,6 +27,7 @@ interface SidebarProps {
   route: Route
   open: boolean
   onSelectStack: (name: string | null) => void
+  onOpenHome: () => void
   onOpenSettings: () => void
   onOpenCaddy: () => void
   onNewStack: () => void
@@ -40,6 +42,7 @@ export function Sidebar({
   route,
   open,
   onSelectStack,
+  onOpenHome,
   onOpenSettings,
   onOpenCaddy,
   onNewStack,
@@ -75,6 +78,18 @@ export function Sidebar({
       }`}
     >
       <div className="mb-4 px-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">LITETHAUS</div>
+
+      <button
+        onClick={onOpenHome}
+        className={`mb-1 flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
+          route.view === 'home'
+            ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+            : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+        }`}
+      >
+        <HomeIcon size={14} className="text-neutral-400 dark:text-neutral-500" />
+        Home
+      </button>
 
       <div className="flex items-center gap-1 rounded px-1 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-900">
         <button
