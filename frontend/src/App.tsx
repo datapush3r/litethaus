@@ -127,8 +127,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   const refreshStacks = useCallback(async () => {
     const list = await fetchStacks()
-    setStacks(list)
+    // Statuses resolve before stacks are published to state - otherwise
+    // there's a render where statuses is still {}, every stack ties at the
+    // same sort rank, and the sidebar's "sort by state" falls through to
+    // its name tie-breaker, flashing an alphabetical order for an instant.
     await refreshStatuses(list)
+    setStacks(list)
   }, [refreshStatuses])
 
   async function handleCreate(name: string, content: string) {
@@ -144,9 +148,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       try {
         const list = await fetchStacks()
         if (cancelled) return
+        // Same ordering as refreshStacks() above - avoids the same
+        // sort-flash on first load, not just on later refreshes.
+        await refreshStatuses(list)
+        if (cancelled) return
         setStacks(list)
         setError(null)
-        await refreshStatuses(list)
       } catch {
         if (!cancelled) setError('backend unreachable')
       }
