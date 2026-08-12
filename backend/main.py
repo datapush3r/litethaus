@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -65,7 +65,10 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="litethaus", lifespan=lifespan)
+# docs_url/redoc_url/openapi_url off: a single-user home dashboard has no
+# audience for interactive API docs, and leaving them on is one more set of
+# unauthenticated bare routes for no benefit.
+app = FastAPI(title="litethaus", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,27 +78,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-PUBLIC_PATHS = {"/health", "/auth/status", "/auth/setup", "/auth/login"}
+# Every real API route is registered on this router (mounted at "/api" below,
+# after all of them are defined) rather than directly on `app` - a route
+# registered bare (e.g. "/config") is matched by FastAPI regardless of what
+# any middleware does, so a literal "/api" prefix in the route table itself
+# is what actually keeps every API handler unreachable except through the
+# auth-gated "/api/*" path. A previous version relied on the middleware alone
+# (rewriting "/api/*" to a bare path before routing, and letting non-"/api/"
+# requests pass straight through) - since the handlers were *also* registered
+# at those same bare paths, hitting them directly (no "/api/" prefix) skipped
+# the auth check entirely. Only the SPA catch-all and the websocket routes
+# (hardcoded "/api/..." already, with their own inline auth check - the
+# middleware doesn't run for websocket upgrades) stay off this router.
+api = APIRouter()
+
+PUBLIC_PATHS = {"/api/health", "/api/auth/status", "/api/auth/setup", "/api/auth/login"}
 
 
 @app.middleware("http")
 async def enforce_auth(request: Request, call_next):
-    # In production the built frontend and the API are served from the same
-    # origin, with the frontend calling "/api/*" (matching its dev-time Vite
-    # proxy rewrite - see vite.config.ts). Requests outside "/api/" are static
-    # SPA assets and always pass through untouched; "/api/*" gets the prefix
-    # stripped before routing so the existing handlers below (registered
-    # without the prefix) don't need to change.
+    # Anything outside "/api/" cannot be a real API route (see the `api`
+    # router above) - it's the SPA shell (index.html/JS/CSS) or a client-side
+    # route the SPA's own router handles, which must stay reachable
+    # unauthenticated so the login screen itself can load.
     path = request.url.path
     if not path.startswith("/api/"):
         return await call_next(request)
-    request.scope["path"] = path[len("/api") :] or "/"
 
     # Open by default until a password is actually set (first-run UX, like
     # most self-hosted dashboards) or while auth_enabled is set to false in
     # config.yaml (local testing); once configured, everything except the
     # small public/auth surface requires a valid session cookie.
-    if request.scope["path"] in PUBLIC_PATHS or not auth_service.enabled() or not auth_service.is_configured():
+    if path in PUBLIC_PATHS or not auth_service.enabled() or not auth_service.is_configured():
         return await call_next(request)
     if not auth_service.is_valid_session(request.cookies.get(SESSION_COOKIE)):
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
@@ -119,12 +133,12 @@ def _set_session_cookie(request: Request, response: Response) -> None:
     )
 
 
-@app.get("/health")
+@api.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/auth/status")
+@api.get("/auth/status")
 def auth_status(request: Request) -> dict[str, bool]:
     if not auth_service.enabled():
         return {"configured": True, "authenticated": True}
@@ -133,7 +147,7 @@ def auth_status(request: Request) -> dict[str, bool]:
     return {"configured": configured, "authenticated": authenticated}
 
 
-@app.post("/auth/setup")
+@api.post("/auth/setup")
 def auth_setup(body: dict[str, Any], request: Request, response: Response) -> dict[str, bool]:
     try:
         auth_service.setup(str(body.get("username", "")), str(body.get("password", "")))
@@ -143,7 +157,7 @@ def auth_setup(body: dict[str, Any], request: Request, response: Response) -> di
     return {"ok": True}
 
 
-@app.post("/auth/login")
+@api.post("/auth/login")
 def auth_login(body: dict[str, Any], request: Request, response: Response) -> dict[str, bool]:
     remote_addr = request.client.host if request.client else "unknown"
     try:
@@ -156,14 +170,14 @@ def auth_login(body: dict[str, Any], request: Request, response: Response) -> di
     return {"ok": True}
 
 
-@app.post("/auth/logout")
+@api.post("/auth/logout")
 def auth_logout(request: Request, response: Response) -> dict[str, bool]:
     auth_service.revoke_session(request.cookies.get(SESSION_COOKIE))
     response.delete_cookie(SESSION_COOKIE)
     return {"ok": True}
 
 
-@app.post("/auth/change-password")
+@api.post("/auth/change-password")
 def auth_change_password(body: dict[str, Any]) -> dict[str, bool]:
     try:
         auth_service.change_password(str(body.get("current_password", "")), str(body.get("new_password", "")))
@@ -172,7 +186,7 @@ def auth_change_password(body: dict[str, Any]) -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.get("/config")
+@api.get("/config")
 def get_config() -> dict[str, Any]:
     data = dict(config_service.load())
     data.pop("auth", None)
@@ -193,7 +207,7 @@ CADDY_RELEVANT_KEYS = {
 }
 
 
-@app.patch("/config")
+@api.patch("/config")
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
     # auth credentials only ever change through the dedicated /auth endpoints,
     # which hash the password before it touches config.yaml.
@@ -222,23 +236,23 @@ def _redact_secrets(value: Any) -> Any:
     return value
 
 
-@app.get("/caddy/status")
+@api.get("/caddy/status")
 def caddy_status() -> dict[str, Any]:
     return caddy_service.status()
 
 
-@app.get("/caddy/version")
+@api.get("/caddy/version")
 def caddy_version() -> dict[str, Any]:
     return {"version": caddy_service.version()}
 
 
-@app.post("/caddy/reload")
+@api.post("/caddy/reload")
 def caddy_reload() -> dict[str, Any]:
     caddy_service.sync(stack_service.list_stacks())
     return caddy_service.status()
 
 
-@app.get("/caddy/config")
+@api.get("/caddy/config")
 def caddy_config() -> dict[str, Any]:
     cfg = config_service.load()
     config = caddy_service.build_config(
@@ -254,7 +268,7 @@ def caddy_config() -> dict[str, Any]:
     return _redact_secrets(config)
 
 
-@app.get("/caddy/live")
+@api.get("/caddy/live")
 def caddy_live() -> dict[str, Any]:
     try:
         config = caddy_service.fetch_live_config()
@@ -263,7 +277,7 @@ def caddy_live() -> dict[str, Any]:
     return _redact_secrets(config)
 
 
-@app.get("/caddy/upstreams")
+@api.get("/caddy/upstreams")
 def caddy_upstreams() -> list[dict[str, Any]]:
     try:
         return caddy_service.fetch_upstreams()
@@ -271,7 +285,7 @@ def caddy_upstreams() -> list[dict[str, Any]]:
         raise HTTPException(status_code=502, detail=f"Caddy unreachable: {exc}")
 
 
-@app.get("/caddy/certificates")
+@api.get("/caddy/certificates")
 def caddy_certificates() -> list[dict[str, Any]]:
     try:
         return cert_service.list_certificates()
@@ -279,7 +293,7 @@ def caddy_certificates() -> list[dict[str, Any]]:
         raise HTTPException(status_code=502, detail=f"Caddy unreachable: {exc}")
 
 
-@app.get("/stacks")
+@api.get("/stacks")
 def list_stacks() -> list[dict[str, Any]]:
     return [asdict(s) for s in stack_service.list_stacks()]
 
@@ -291,7 +305,7 @@ def _get_stack(name: str):
     return stacks[name]
 
 
-@app.post("/stacks")
+@api.post("/stacks")
 def create_stack(body: dict[str, Any]) -> dict[str, Any]:
     try:
         stack = stack_service.create_stack(str(body["name"]), str(body["content"]))
@@ -301,7 +315,7 @@ def create_stack(body: dict[str, Any]) -> dict[str, Any]:
     return asdict(stack)
 
 
-@app.get("/stacks/{name}/raw")
+@api.get("/stacks/{name}/raw")
 def get_stack_raw(name: str, file: str | None = None) -> dict[str, str]:
     _get_stack(name)
     try:
@@ -310,7 +324,7 @@ def get_stack_raw(name: str, file: str | None = None) -> dict[str, str]:
         raise HTTPException(status_code=404, detail="file not found")
 
 
-@app.put("/stacks/{name}/raw")
+@api.put("/stacks/{name}/raw")
 def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
     _get_stack(name)
     try:
@@ -323,7 +337,7 @@ def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
     return asdict(stack)
 
 
-@app.patch("/stacks/{name}/metadata")
+@api.patch("/stacks/{name}/metadata")
 def update_stack_metadata(name: str, body: dict[str, Any]) -> dict[str, Any]:
     _get_stack(name)
     allowed = {"icon", "port", "domain", "service", "favorite", "lan_only", "passive_health_check"}
@@ -336,7 +350,7 @@ def update_stack_metadata(name: str, body: dict[str, Any]) -> dict[str, Any]:
     return asdict(stack)
 
 
-@app.delete("/stacks/{name}")
+@api.delete("/stacks/{name}")
 def remove_stack(name: str) -> dict[str, bool]:
     stack = _get_stack(name)
     if docker_service.container_status(stack) != "stopped":
@@ -346,7 +360,7 @@ def remove_stack(name: str) -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.get("/stacks/{name}/status")
+@api.get("/stacks/{name}/status")
 def stack_status(name: str) -> dict[str, Any]:
     details = docker_service.container_details(_get_stack(name))
     return {
@@ -356,38 +370,46 @@ def stack_status(name: str) -> dict[str, Any]:
     }
 
 
-@app.get("/stacks/{name}/health-log")
+@api.get("/stacks/{name}/health-log")
 def stack_health_log(name: str) -> list[dict[str, str]]:
     _get_stack(name)
     return health_service.health_log(name)
 
 
-@app.post("/stacks/{name}/up")
+@api.post("/stacks/{name}/up")
 def stack_up(name: str) -> dict[str, Any]:
     ok, output = docker_service.compose_up(_get_stack(name))
     caddy_service.sync(stack_service.list_stacks())
     return {"ok": ok, "output": output}
 
 
-@app.post("/stacks/{name}/down")
+@api.post("/stacks/{name}/down")
 def stack_down(name: str) -> dict[str, Any]:
     ok, output = docker_service.compose_down(_get_stack(name))
     caddy_service.sync(stack_service.list_stacks())
     return {"ok": ok, "output": output}
 
 
-@app.post("/stacks/{name}/restart")
+@api.post("/stacks/{name}/restart")
 def stack_restart(name: str) -> dict[str, Any]:
     ok, output = docker_service.compose_restart(_get_stack(name))
     caddy_service.sync(stack_service.list_stacks())
     return {"ok": ok, "output": output}
 
 
-@app.post("/stacks/{name}/update")
+@api.post("/stacks/{name}/update")
 def stack_update(name: str) -> dict[str, Any]:
     ok, output = docker_service.compose_update(_get_stack(name))
     caddy_service.sync(stack_service.list_stacks())
     return {"ok": ok, "output": output}
+
+
+# All routes above are only reachable at "/api/*" from here on - see the
+# `api` router's docstring-comment near its declaration for why that's load-
+# bearing, not cosmetic. Websocket routes below already hardcode "/api/..."
+# directly (the auth middleware doesn't run for websocket upgrades, so they
+# do their own inline session check instead).
+app.include_router(api, prefix="/api")
 
 
 @app.websocket("/api/stacks/{name}/logs")
