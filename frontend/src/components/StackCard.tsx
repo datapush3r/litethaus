@@ -1,6 +1,7 @@
-import { AlertTriangle, ExternalLink, Star } from 'lucide-react'
+import { AlertTriangle, Star } from 'lucide-react'
 import { stackUrl, type HealthState, type Stack, type StackState } from '../api'
 import { BAD_HEALTH, STATUS_BADGE } from '../statusStyles'
+import { DomainLink } from './DomainLink'
 import { StackIcon } from './StackIcon'
 
 interface StackCardProps {
@@ -51,16 +52,7 @@ export function StackCard({
       </span>
     </div>
   ) : domain ? (
-    <a
-      href={stackUrl(domain, httpsPort)}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-    >
-      {domain}
-      <ExternalLink size={12} />
-    </a>
+    <DomainLink href={stackUrl(domain, httpsPort)} label={domain} />
   ) : (
     <span className="text-xs text-neutral-400 dark:text-neutral-600">no domain configured</span>
   )
