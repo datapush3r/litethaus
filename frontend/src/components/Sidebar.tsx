@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
-  ArrowUpDown,
   ChevronDown,
   ChevronRight,
   Folder,
@@ -11,29 +10,31 @@ import {
   RefreshCw,
   Settings as SettingsIcon,
   Waypoints,
-} from 'lucide-react'
-import type { Stack, StackState, StackStatus } from '../api'
-import type { Route } from '../routing'
-import { BAD_HEALTH, STATUS_DOT } from '../statusStyles'
-import { StackIcon } from './StackIcon'
-
-type SortMode = 'name' | 'state'
-const STATE_RANK: Record<StackState, number> = { running: 0, partial: 1, stopped: 2 }
+} from "lucide-react";
+import {
+  sortStacksByStatus,
+  type Stack,
+  type StackState,
+  type StackStatus,
+} from "../api";
+import type { Route } from "../routing";
+import { BAD_HEALTH, STATUS_DOT } from "../statusStyles";
+import { StackIcon } from "./StackIcon";
 
 interface SidebarProps {
-  stacks: Stack[]
-  statuses: Record<string, StackState>
-  health: Record<string, StackStatus>
-  loading: boolean
-  route: Route
-  open: boolean
-  onSelectStack: (name: string | null) => void
-  onOpenHome: () => void
-  onOpenSettings: () => void
-  onOpenCaddy: () => void
-  onOpenUpdates: () => void
-  onNewStack: () => void
-  onLogout: () => void
+  stacks: Stack[];
+  statuses: Record<string, StackState>;
+  health: Record<string, StackStatus>;
+  loading: boolean;
+  route: Route;
+  open: boolean;
+  onSelectStack: (name: string | null) => void;
+  onOpenHome: () => void;
+  onOpenSettings: () => void;
+  onOpenCaddy: () => void;
+  onOpenUpdates: () => void;
+  onNewStack: () => void;
+  onLogout: () => void;
 }
 
 export function Sidebar({
@@ -51,46 +52,36 @@ export function Sidebar({
   onNewStack,
   onLogout,
 }: SidebarProps) {
-  const [expanded, setExpanded] = useState(true)
-  const [sortBy, setSortBy] = useState<SortMode>(
-    () => (localStorage.getItem('litethaus-sidebar-sort') as SortMode | null) ?? 'state',
-  )
-  const selected = route.view === 'stack' ? route.name : null
+  const [expanded, setExpanded] = useState(true);
+  const selected = route.view === "stack" ? route.name : null;
 
-  useEffect(() => {
-    localStorage.setItem('litethaus-sidebar-sort', sortBy)
-  }, [sortBy])
-
-  const sortedStacks = useMemo(() => {
-    const sorted = [...stacks]
-    sorted.sort((a, b) => {
-      if (sortBy === 'state') {
-        const rank = (s: Stack) => STATE_RANK[statuses[s.name] ?? 'stopped']
-        const diff = rank(a) - rank(b)
-        if (diff !== 0) return diff
-      }
-      return a.name.localeCompare(b.name)
-    })
-    return sorted
-  }, [stacks, statuses, sortBy])
+  const sortedStacks = useMemo(
+    () => sortStacksByStatus(stacks, statuses),
+    [stacks, statuses],
+  );
 
   return (
     <nav
       className={`fixed inset-y-0 left-0 z-40 flex h-screen w-60 shrink-0 flex-col border-r border-neutral-200 bg-white p-3 transition-transform sm:static sm:translate-x-0 dark:border-neutral-800 dark:bg-neutral-950 ${
-        open ? 'translate-x-0' : '-translate-x-full'
+        open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="mb-4 px-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">LITETHAUS</div>
+      <div className="mb-4 px-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+        LITETHAUS
+      </div>
 
       <button
         onClick={onOpenHome}
         className={`mb-1 flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
-          route.view === 'home'
-            ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
-            : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+          route.view === "home"
+            ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+            : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
         }`}
       >
-        <HomeIcon size={14} className="text-neutral-400 dark:text-neutral-500" />
+        <HomeIcon
+          size={14}
+          className="text-neutral-400 dark:text-neutral-500"
+        />
         Home
       </button>
 
@@ -98,34 +89,31 @@ export function Sidebar({
         <button
           onClick={() => setExpanded((e) => !e)}
           className="text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
-          aria-label={expanded ? 'Collapse Stacks' : 'Expand Stacks'}
+          aria-label={expanded ? "Collapse Stacks" : "Expand Stacks"}
         >
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
         <button
           onClick={() => onSelectStack(null)}
           className={`flex flex-1 items-center gap-1.5 text-left text-sm ${
-            route.view === 'stacks'
-              ? 'font-medium text-neutral-900 dark:text-neutral-100'
-              : 'text-neutral-600 dark:text-neutral-300'
+            route.view === "stacks"
+              ? "font-medium text-neutral-900 dark:text-neutral-100"
+              : "text-neutral-600 dark:text-neutral-300"
           }`}
         >
-          <Folder size={14} className="text-neutral-400 dark:text-neutral-500" />
+          <Folder
+            size={14}
+            className="text-neutral-400 dark:text-neutral-500"
+          />
           Stacks
         </button>
-        <span className="pr-1 text-xs text-neutral-400 dark:text-neutral-600">{stacks.length}</span>
-        <button
-          onClick={() => setSortBy((m) => (m === 'name' ? 'state' : 'name'))}
-          className="text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
-          aria-label={`Sort by ${sortBy === 'name' ? 'state' : 'name'} (currently sorted by ${sortBy})`}
-          title={`Sorted by ${sortBy}`}
-        >
-          <ArrowUpDown size={13} />
-        </button>
+        <span className="pr-1 text-xs text-neutral-400 dark:text-neutral-600">
+          {stacks.length}
+        </span>
         <button
           onClick={onNewStack}
           className={`text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 ${
-            route.view === 'new' ? 'text-neutral-900 dark:text-neutral-100' : ''
+            route.view === "new" ? "text-neutral-900 dark:text-neutral-100" : ""
           }`}
           aria-label="New stack"
         >
@@ -135,35 +123,47 @@ export function Sidebar({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {expanded && (
-        <ul className="mt-0.5 ml-3 border-l border-neutral-200 pl-2 dark:border-neutral-800">
-          {sortedStacks.map((stack) => (
-            <li key={stack.name}>
-              <button
-                onClick={() => onSelectStack(stack.name)}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${
-                  selected === stack.name
-                    ? 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
-                    : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-200'
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    stack.error ? 'bg-red-500' : STATUS_DOT[statuses[stack.name] ?? 'stopped']
+          <ul className="mt-0.5 ml-3 border-l border-neutral-200 pl-2 dark:border-neutral-800">
+            {sortedStacks.map((stack) => (
+              <li key={stack.name}>
+                <button
+                  onClick={() => onSelectStack(stack.name)}
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${
+                    selected === stack.name
+                      ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+                      : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-200"
                   }`}
-                />
-                <StackIcon icon={stack.x_litethaus.icon} size={14} />
-                <span className="truncate">{stack.name}</span>
-                {health[stack.name] && BAD_HEALTH.has(health[stack.name].health) && (
-                  <AlertTriangle size={12} className="ml-auto shrink-0 text-red-500" />
-                )}
-              </button>
-            </li>
-          ))}
-          {!loading && stacks.length === 0 && (
-            <li className="px-2 py-1 text-xs text-neutral-400 dark:text-neutral-600">no stacks found</li>
-          )}
-          {loading && <li className="px-2 py-1 text-xs text-neutral-400 dark:text-neutral-600">loading…</li>}
-        </ul>
+                >
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      stack.error
+                        ? "bg-red-500"
+                        : STATUS_DOT[statuses[stack.name] ?? "stopped"]
+                    }`}
+                  />
+                  <StackIcon icon={stack.x_litethaus.icon} size={14} />
+                  <span className="truncate">{stack.name}</span>
+                  {health[stack.name] &&
+                    BAD_HEALTH.has(health[stack.name].health) && (
+                      <AlertTriangle
+                        size={12}
+                        className="ml-auto shrink-0 text-red-500"
+                      />
+                    )}
+                </button>
+              </li>
+            ))}
+            {!loading && stacks.length === 0 && (
+              <li className="px-2 py-1 text-xs text-neutral-400 dark:text-neutral-600">
+                no stacks found
+              </li>
+            )}
+            {loading && (
+              <li className="px-2 py-1 text-xs text-neutral-400 dark:text-neutral-600">
+                loading…
+              </li>
+            )}
+          </ul>
         )}
       </div>
 
@@ -171,44 +171,56 @@ export function Sidebar({
         <button
           onClick={onOpenSettings}
           className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
-            route.view === 'settings'
-              ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
-              : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+            route.view === "settings"
+              ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
           }`}
         >
-          <SettingsIcon size={14} className="text-neutral-400 dark:text-neutral-500" />
+          <SettingsIcon
+            size={14}
+            className="text-neutral-400 dark:text-neutral-500"
+          />
           Settings
         </button>
         <button
           onClick={onOpenCaddy}
           className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
-            route.view === 'caddy'
-              ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
-              : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+            route.view === "caddy"
+              ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
           }`}
         >
-          <Waypoints size={14} className="text-neutral-400 dark:text-neutral-500" />
+          <Waypoints
+            size={14}
+            className="text-neutral-400 dark:text-neutral-500"
+          />
           Caddy
         </button>
         <button
           onClick={onOpenUpdates}
           className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
-            route.view === 'updates'
-              ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
-              : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+            route.view === "updates"
+              ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+              : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
           }`}
         >
-          <RefreshCw size={14} className="text-neutral-400 dark:text-neutral-500" />
+          <RefreshCw
+            size={14}
+            className="text-neutral-400 dark:text-neutral-500"
+          />
           Updates
         </button>
         <button
           onClick={onLogout}
           className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
         >
-          <LogOut size={14} className="text-neutral-400 dark:text-neutral-500" />
+          <LogOut
+            size={14}
+            className="text-neutral-400 dark:text-neutral-500"
+          />
           Log out
         </button>
       </div>
     </nav>
-  )
+  );
 }

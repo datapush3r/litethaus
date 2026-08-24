@@ -25,7 +25,7 @@ class _RecordingContainers:
         self._list_result = list_result or []
         self._get_result = get_result
 
-    def list(self, filters: dict | None = None) -> list:
+    def list(self, filters: dict | None = None, **kwargs: object) -> list:
         self.list_calls.append(filters)
         return self._list_result
 
@@ -169,8 +169,8 @@ def test_find_caddy_container_returns_none_when_not_found() -> None:
     assert svc.find_caddy_container() is None
 
 
-def _fake_run(returncode: int = 0) -> SimpleNamespace:
-    return SimpleNamespace(returncode=returncode, stdout="", stderr="")
+def _fake_run(returncode: int = 0, stdout: str = "", stderr: str = "") -> SimpleNamespace:
+    return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 def test_compose_check_update_detects_image_change() -> None:
@@ -243,6 +243,142 @@ def test_exec_run_returns_exit_code_and_output() -> None:
     assert output == b"hello\n"
 
 
+def test_parse_percent() -> None:
+    assert DockerService._parse_percent("12.34%") == 12.34
+    assert DockerService._parse_percent("-1") is None
+    assert DockerService._parse_percent("") is None
+
+
+def test_parse_mem_usage() -> None:
+    parse = DockerService._parse_mem_usage
+    assert parse("512MiB / 7.77GiB") == 512 * 1024**2
+    assert parse("1.5GiB / 31.05GiB") == int(1.5 * 1024**3)
+    assert parse("100kB / 1GB") == 100 * 1024
+    assert parse("- / -") is None
+    assert parse("") is None
+
+
+def test_container_stats_matches_running_containers_and_parses_rows() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    running_a = SimpleNamespace(
+        name="ex-a",
+        status="running",
+        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
+    )
+    exited_b = SimpleNamespace(
+        name="ex-b",
+        status="exited",
+        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
+    )
+    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[running_a, exited_b]))
+
+    def fake_run(cmd, **kwargs):
+        assert cmd[:2] == ["docker", "stats"]
+        return _fake_run(
+            returncode=0,
+            stdout="ex-a\t1.5%\t128MiB / 31GiB\t42%\nother-c\t0.1%\t1MiB / 31GiB\t-\nex-b\t0%\t0B / 31GiB\t-\n",
+        )
+
+    with patch("docker_service.subprocess.run", side_effect=fake_run):
+        rows = svc.container_stats(stack)
+
+    assert rows == [{"name": "ex-a", "cpu_percent": 1.5, "mem_bytes": 128 * 1024**2, "gpu_percent": 42.0}]
+
+
+def test_container_stats_falls_back_when_gpu_column_unsupported() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    running_a = SimpleNamespace(
+        name="ex-a",
+        status="running",
+        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
+    )
+    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[running_a]))
+
+    calls: list[str] = []
+
+    def fake_run(cmd, **kwargs):
+        fmt = cmd[cmd.index("--format") + 1]
+        calls.append(fmt)
+        if "GPUUsage" in fmt:
+            return _fake_run(returncode=1, stderr="can't evaluate field GPUUsage")
+        return _fake_run(returncode=0, stdout="ex-a\t2.5%\t64MiB / 31GiB\n")
+
+    with patch("docker_service.subprocess.run", side_effect=fake_run):
+        rows = svc.container_stats(stack)
+
+    assert len(calls) == 2
+    assert "GPUUsage" not in calls[1]
+    assert rows == [{"name": "ex-a", "cpu_percent": 2.5, "mem_bytes": 64 * 1024**2, "gpu_percent": None}]
+
+
+def test_container_stats_empty_when_nothing_running() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    exited = SimpleNamespace(
+        name="ex-b",
+        status="exited",
+        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
+    )
+    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[exited]))
+
+    with patch("docker_service.subprocess.run", side_effect=AssertionError("should not be called")):
+        assert svc.container_stats(stack) == []
+
+
+def test_container_stats_empty_when_docker_stats_fails() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    running_a = SimpleNamespace(
+        name="ex-a",
+        status="running",
+        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
+    )
+    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[running_a]))
+
+    with patch("docker_service.subprocess.run", return_value=_fake_run(returncode=1, stderr="boom")):
+        assert svc.container_stats(stack) == []
+
+
+def test_host_container_stats_one_snapshot_for_all_stacks() -> None:
+    svc = _svc()
+    running_a = SimpleNamespace(
+        name="ex-a",
+        status="running",
+        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
+    )
+    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[running_a]))
+
+    def fake_run(cmd, **kwargs):
+        assert cmd[:2] == ["docker", "stats"]
+        return _fake_run(returncode=0, stdout="ex-a\t3.0%\t16MiB / 31GiB\t-\n")
+
+    with patch("docker_service.subprocess.run", side_effect=fake_run) as mock_run:
+        rows = svc.host_container_stats(
+            [
+                Stack(name="example", path="/config/stacks/example/compose.yaml"),
+                Stack(name="other", path="/config/stacks/other/compose.yaml"),
+            ]
+        )
+
+    assert mock_run.call_count == 1
+    assert rows == [{"stack": "example", "name": "ex-a", "cpu_percent": 3.0, "mem_bytes": 16 * 1024**2, "gpu_percent": None}]
+
+
+def test_host_container_stats_empty_when_nothing_running() -> None:
+    svc = _svc()
+    exited = SimpleNamespace(
+        name="ex-b",
+        status="exited",
+        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
+    )
+    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[exited]))
+
+    with patch("docker_service.subprocess.run", side_effect=AssertionError("should not be called")):
+        assert svc.host_container_stats([Stack(name="example", path="/config/stacks/example/compose.yaml")]) == []
+
+
 if __name__ == "__main__":
     test_compose_cmd_uses_project_name_and_compose_file()
     test_compose_cmd_adds_override_file_when_present()
@@ -259,4 +395,12 @@ if __name__ == "__main__":
     test_compose_check_update_returns_false_when_pull_fails()
     test_compose_check_update_false_when_stack_has_no_running_containers()
     test_exec_run_returns_exit_code_and_output()
+    test_parse_percent()
+    test_parse_mem_usage()
+    test_container_stats_matches_running_containers_and_parses_rows()
+    test_container_stats_empty_when_nothing_running()
+    test_container_stats_empty_when_docker_stats_fails()
+    test_container_stats_falls_back_when_gpu_column_unsupported()
+    test_host_container_stats_one_snapshot_for_all_stacks()
+    test_host_container_stats_empty_when_nothing_running()
     print("ok")

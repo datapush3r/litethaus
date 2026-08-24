@@ -20,6 +20,7 @@ import {
   stackRestart,
   stackUp,
   stackUpdate,
+  sortStacksByStatus,
   updateStackMetadata,
   type AuthStatus,
   type Stack,
@@ -113,7 +114,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [route, navigate] = useRoute();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [httpsPort, setHttpsPort] = useState(443);
-  const [extraRoutesJson, setExtraRoutesJson] = useState("");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">(
     () =>
@@ -169,8 +169,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         if (cancelled) return;
         setThemePreference(String(cfg.theme ?? "system"));
         setHttpsPort(Number(cfg.https_port ?? 443));
-        setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? ""));
-      } catch {}
+      } catch {
+        // config is best-effort; defaults apply if the fetch fails
+      }
     }
 
     load();
@@ -235,11 +236,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     const filtered = query
       ? (stacks ?? []).filter((s) => s.name.toLowerCase().includes(query))
       : (stacks ?? []);
-    return [...filtered].sort(
+    return sortStacksByStatus(filtered, statuses).sort(
       (a, b) =>
         Number(!!b.x_litethaus.favorite) - Number(!!a.x_litethaus.favorite),
     );
-  }, [stacks, search]);
+  }, [stacks, search, statuses]);
 
   const selectedStack =
     route.view === "stack"
@@ -361,8 +362,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               <HomePage
                 stacks={stacks}
                 statuses={statuses}
-                extraRoutesJson={extraRoutesJson}
-                httpsPort={httpsPort}
+                health={health}
+                onOpenStack={(name) => navigate({ view: "stack", name })}
               />
             ))}
 

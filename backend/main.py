@@ -317,6 +317,7 @@ def stack_status(name: str) -> dict[str, Any]:
         "health": docker_service.summarize_health(details),
         "containers": details,
         "update_available": health_service.update_available(name),
+        "stats": health_service.container_stats(name),
     }
 
 

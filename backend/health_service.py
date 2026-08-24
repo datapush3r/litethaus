@@ -5,6 +5,7 @@ import time
 import urllib.request
 from collections import deque
 from datetime import date, datetime, timezone
+from typing import Any
 
 from cert_service import cert_service
 from config_service import config_service
@@ -36,10 +37,16 @@ class HealthService:
         self._update_available: dict[str, bool] = {}
         self._update_notified: set[str] = set()
         self._last_auto_update_date: date | None = None
+        self._container_stats: list[dict[str, Any]] = []
 
     def check_once(self) -> None:
         cfg = config_service.load()
         webhook_url = cfg.get("webhook_url") or ""
+        # One docker-stats snapshot covers every running container on the host;
+        # calling container_stats per stack would re-run it once per stack.
+        self._container_stats = docker_service.host_container_stats(
+            [s for s in stack_service.list_stacks() if not s.error]
+        )
         for stack in stack_service.list_stacks():
             if stack.error:
                 continue
@@ -257,6 +264,12 @@ class HealthService:
 
     def health_log(self, stack_name: str) -> list[dict[str, str]]:
         return [e for e in self._health_log if e["stack"] == stack_name]
+
+    def container_stats(self, stack_name: str | None = None) -> list[dict[str, Any]]:
+        """Latest cached per-container usage rows (all stacks, or one stack)."""
+        if stack_name is not None:
+            return [r for r in self._container_stats if r.get("stack") == stack_name]
+        return self._container_stats
 
     def watch_forever(self) -> None:
         stop_event = threading.Event()

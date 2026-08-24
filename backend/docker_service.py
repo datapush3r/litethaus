@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import os
 import pty
+import re
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -125,6 +127,112 @@ class DockerService:
             all=True, filters={"label": f"com.docker.compose.project={self._project_name(stack)}"}
         )
         return [self._describe(c) for c in containers]
+
+    def container_stats(self, stack: Stack) -> list[dict[str, Any]]:
+        """Live resource usage for this stack's running containers (cpu %, mem bytes, gpu %).
+
+        Takes one `docker stats --no-stream` snapshot of the whole host and keeps
+        only rows belonging to this stack. Callers checking many stacks should
+        share a single snapshot instead of calling this per-stack.
+        """
+        running = {d["name"] for d in self.container_details(stack) if d["state"] == "running"}
+        if not running:
+            return []
+        proc = self._run_docker_stats()
+        if proc is None:
+            return []
+
+        rows: list[dict[str, Any]] = []
+        for line in proc.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 3 or parts[0] not in running:
+                continue
+            rows.append(
+                {
+                    "name": parts[0],
+                    "cpu_percent": self._parse_percent(parts[1]),
+                    "mem_bytes": self._parse_mem_usage(parts[2]),
+                    "gpu_percent": self._parse_percent(parts[3]) if len(parts) > 3 else None,
+                }
+            )
+        return rows
+
+    def host_container_stats(self, stacks: list[Stack]) -> list[dict[str, Any]]:
+        """One `docker stats` snapshot of the whole host, tagged with stack names.
+
+        Cheaper than calling container_stats per stack (which re-runs the
+        snapshot each time). Rows carry {stack, name, cpu_percent, mem_bytes,
+        gpu_percent}; stacks with no running containers contribute nothing.
+        """
+        by_container: dict[str, str] = {}
+        for s in stacks:
+            for d in self.container_details(s):
+                if d["state"] == "running":
+                    by_container.setdefault(d["name"], s.name)
+        if not by_container:
+            return []
+        proc = self._run_docker_stats()
+        if proc is None:
+            return []
+
+        rows: list[dict[str, Any]] = []
+        for line in proc.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 3 or parts[0] not in by_container:
+                continue
+            rows.append(
+                {
+                    "stack": by_container[parts[0]],
+                    "name": parts[0],
+                    "cpu_percent": self._parse_percent(parts[1]),
+                    "mem_bytes": self._parse_mem_usage(parts[2]),
+                    "gpu_percent": self._parse_percent(parts[3]) if len(parts) > 3 else None,
+                }
+            )
+        return rows
+
+    def _run_docker_stats(self) -> subprocess.CompletedProcess[str] | None:
+        """One `docker stats --no-stream` snapshot of every running container.
+
+        GPUUsage needs Docker >= 28; older daemons error on the template, so
+        fall back to a format without it. Returns None on failure.
+        """
+        fmt = '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.GPUUsage}}'
+        try:
+            proc = subprocess.run(
+                ["docker", "stats", "--no-stream", "--format", fmt],
+                capture_output=True, text=True, timeout=30,
+            )
+            if proc.returncode != 0 and "GPUUsage" in (proc.stderr or ""):
+                logger.info("docker stats: GPU column unsupported, retrying without it")
+                fmt = '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
+                proc = subprocess.run(
+                    ["docker", "stats", "--no-stream", "--format", fmt],
+                    capture_output=True, text=True, timeout=30,
+                )
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            logger.warning("docker stats failed: %s", exc)
+            return None
+        if proc.returncode != 0:
+            logger.warning("docker stats exited %d: %s", proc.returncode, proc.stderr.strip())
+            return None
+        return proc
+
+    @staticmethod
+    def _parse_percent(value: str) -> float | None:
+        m = re.search(r"([\d.]+)%", value)
+        return float(m.group(1)) if m else None
+
+    @staticmethod
+    def _parse_mem_usage(value: str) -> int | None:
+        """Parse docker stats 'USED / TOTAL' into used bytes (None on parse fail)."""
+        m = re.match(r"([\d.]+)([a-zA-Z]*)\s*/", value)
+        if not m:
+            return None
+        number, unit = float(m.group(1)), m.group(2)
+        # docker stats uses binary units: kB=KiB, MB=MiB, GB=GiB
+        factor = {"": 1, "b": 1, "k": 1024, "m": 1024**2, "g": 1024**3}.get(unit[:1].lower())
+        return int(number * factor) if factor is not None else None
 
     def find_container(self, stack: Stack, container_name: str) -> Any | None:
         for c in self.client.containers.list(
