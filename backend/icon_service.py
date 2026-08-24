@@ -8,7 +8,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Same catalog as the frontend's IconPicker.tsx/StackIcon.tsx use for search/render.
 METADATA_URL = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/metadata.json"
 FUZZY_CUTOFF = 0.8
 MIN_CANDIDATE_LEN = 3
@@ -21,16 +20,10 @@ def _normalize(value: str) -> str:
 class IconService:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._catalog: dict[str, str] | None = None  # normalized alias/slug -> canonical slug
+        self._catalog: dict[str, str] | None = None
         self._fetch_in_progress = False
 
     def _start_fetch(self) -> None:
-        # Fetches on a background thread so callers (in particular
-        # stack_service.scan(), which runs synchronously in main.py's
-        # startup lifespan) never block on this network call. Only caches
-        # the catalog on success - a failed fetch just clears the in-progress
-        # flag, so the next guess() call retries instead of the catalog
-        # staying permanently empty for the rest of the process's life.
         with self._lock:
             if self._catalog is not None or self._fetch_in_progress:
                 return

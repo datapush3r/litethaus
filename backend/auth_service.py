@@ -21,9 +21,6 @@ class AuthService:
     def __init__(self, config: ConfigService | None = None) -> None:
         self._config = config or config_service
         self._sessions: dict[str, float] = {}
-        # ponytail: in-process memory only - resets on restart and isn't
-        # shared across workers. Fine for litethaus's single-process,
-        # single-user deployment model; revisit if that ever changes.
         self._failed_attempts: dict[str, list[float]] = {}
 
     def is_configured(self) -> bool:

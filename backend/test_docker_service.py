@@ -1,6 +1,7 @@
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from config_service import ConfigService
 from docker_service import DockerService
@@ -8,8 +9,6 @@ from stacks_service import Stack
 
 
 def _svc(overrides: dict[str, object] | None = None) -> DockerService:
-    # A fresh, unbootstrapped config path so tests never touch the real
-    # /config/config.yaml or depend on project_prefix being unset there.
     config = ConfigService(Path(tempfile.mkdtemp()) / "config.yaml")
     if overrides:
         config.update(overrides)
@@ -117,8 +116,6 @@ def test_summarize_health_unhealthy_and_healthy_and_unknown() -> None:
         DockerService.summarize_health([{"name": "a", "state": "running", "health": "healthy", "restart_count": 0}])
         == "healthy"
     )
-    # mixed healthchecked + non-healthchecked containers: any bad signal wins,
-    # otherwise it's only "healthy" once every checked container agrees
     assert (
         DockerService.summarize_health(
             [
@@ -156,8 +153,6 @@ def test_find_caddy_container_uses_override_name_when_configured() -> None:
 
 def test_find_caddy_container_picks_deterministically_by_name_when_multiple_match() -> None:
     svc = _svc()
-    # Passed in reverse-alphabetical order so a pass here proves sorting
-    # actually happened, not just "whatever was first in the list".
     later = SimpleNamespace(name="zzz-caddy-2")
     earlier = SimpleNamespace(name="aaa-caddy-1")
     containers = _RecordingContainers(list_result=[later, earlier])
@@ -172,6 +167,69 @@ def test_find_caddy_container_returns_none_when_not_found() -> None:
     svc = _svc()
     svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[]))
     assert svc.find_caddy_container() is None
+
+
+def _fake_run(returncode: int = 0) -> SimpleNamespace:
+    return SimpleNamespace(returncode=returncode, stdout="", stderr="")
+
+
+def test_compose_check_update_detects_image_change() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    container = SimpleNamespace(
+        attrs={"Config": {"Image": "nginx:latest"}}, image=SimpleNamespace(id="sha256:old")
+    )
+    containers = _RecordingContainers(list_result=[container])
+    images = SimpleNamespace(get=lambda ref: SimpleNamespace(id="sha256:new"))
+    svc._client = SimpleNamespace(containers=containers, images=images)
+
+    with patch("docker_service.subprocess.run", return_value=_fake_run()):
+        assert svc.compose_check_update(stack) is True
+
+
+def test_compose_check_update_false_when_image_unchanged() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    container = SimpleNamespace(
+        attrs={"Config": {"Image": "nginx:latest"}}, image=SimpleNamespace(id="sha256:same")
+    )
+    containers = _RecordingContainers(list_result=[container])
+    images = SimpleNamespace(get=lambda ref: SimpleNamespace(id="sha256:same"))
+    svc._client = SimpleNamespace(containers=containers, images=images)
+
+    with patch("docker_service.subprocess.run", return_value=_fake_run()):
+        assert svc.compose_check_update(stack) is False
+
+
+def test_compose_check_update_digest_pinned_image_reports_no_update() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    container = SimpleNamespace(
+        attrs={"Config": {"Image": "nginx@sha256:abc123"}}, image=SimpleNamespace(id="sha256:abc123")
+    )
+    containers = _RecordingContainers(list_result=[container])
+    images = SimpleNamespace(get=lambda ref: SimpleNamespace(id="sha256:abc123"))
+    svc._client = SimpleNamespace(containers=containers, images=images)
+
+    with patch("docker_service.subprocess.run", return_value=_fake_run()):
+        assert svc.compose_check_update(stack) is False
+
+
+def test_compose_check_update_returns_false_when_pull_fails() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+
+    with patch("docker_service.subprocess.run", return_value=_fake_run(returncode=1)):
+        assert svc.compose_check_update(stack) is False
+
+
+def test_compose_check_update_false_when_stack_has_no_running_containers() -> None:
+    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
+    svc = _svc()
+    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[]))
+
+    with patch("docker_service.subprocess.run", return_value=_fake_run()):
+        assert svc.compose_check_update(stack) is False
 
 
 def test_exec_run_returns_exit_code_and_output() -> None:
@@ -195,5 +253,10 @@ if __name__ == "__main__":
     test_find_caddy_container_picks_deterministically_by_name_when_multiple_match()
     test_find_caddy_container_uses_override_name_when_configured()
     test_find_caddy_container_returns_none_when_not_found()
+    test_compose_check_update_detects_image_change()
+    test_compose_check_update_false_when_image_unchanged()
+    test_compose_check_update_digest_pinned_image_reports_no_update()
+    test_compose_check_update_returns_false_when_pull_fails()
+    test_compose_check_update_false_when_stack_has_no_running_containers()
     test_exec_run_returns_exit_code_and_output()
     print("ok")

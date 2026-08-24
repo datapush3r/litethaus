@@ -82,7 +82,6 @@ def test_build_config_adds_trailing_wildcard_catchall_when_acme_and_wildcard_dom
 
     assert routes[-1]["match"] == [{"host": ["*.example.com"]}]
     assert routes[-1]["handle"] == [{"handler": "static_response", "status_code": 404}]
-    # the real per-stack route still comes first, so it isn't shadowed
     assert routes[0]["match"] == [{"host": ["app.example.com"]}]
 
 
@@ -136,8 +135,6 @@ def test_build_config_internal_https_lists_domains_with_internal_issuer() -> Non
     ]
     cfg = CaddyService(admin_url="http://caddy:2019").build_config(stacks, https_mode="internal")
 
-    # :80 is deliberately absent so Caddy's automatic_https redirect owns it
-    # instead of our own route serving plaintext HTTP alongside HTTPS.
     assert cfg["apps"]["http"]["servers"]["litethaus"]["listen"] == [":443"]
     policy = cfg["apps"]["tls"]["automation"]["policies"][0]
     assert policy["subjects"] == ["app.home.arpa"]
@@ -215,6 +212,28 @@ def test_sync_failure_records_error_status() -> None:
     status = svc.status()
     assert status["ok"] is False
     assert status["error"] == "no route to host"
+
+
+def test_sync_with_retry_stops_at_first_success() -> None:
+    svc = CaddyService(admin_url="http://caddy:2019")
+    urlopen = MagicMock(side_effect=[OSError("not up yet"), OSError("not up yet"), None])
+    with patch("caddy_service.config_service.load", return_value={"caddy_enabled": True}), \
+         patch("caddy_service.urllib.request.urlopen", urlopen), \
+         patch("caddy_service.time.sleep") as sleep:
+        svc.sync_with_retry([], attempts=6, delay=5)
+    assert urlopen.call_count == 3
+    assert sleep.call_count == 2
+    assert svc.status()["ok"] is True
+
+
+def test_sync_with_retry_gives_up_after_last_attempt() -> None:
+    svc = CaddyService(admin_url="http://caddy:2019")
+    with patch("caddy_service.config_service.load", return_value={"caddy_enabled": True}), \
+         patch("caddy_service.urllib.request.urlopen", side_effect=OSError("still down")), \
+         patch("caddy_service.time.sleep") as sleep:
+        svc.sync_with_retry([], attempts=3, delay=5)
+    assert sleep.call_count == 2
+    assert svc.status()["ok"] is False
 
 
 def test_build_config_appends_valid_extra_routes_after_generated_routes() -> None:
@@ -341,6 +360,8 @@ if __name__ == "__main__":
     test_sync_skips_request_when_caddy_disabled()
     test_sync_success_records_ok_status()
     test_sync_failure_records_error_status()
+    test_sync_with_retry_stops_at_first_success()
+    test_sync_with_retry_gives_up_after_last_attempt()
     test_build_config_appends_valid_extra_routes_after_generated_routes()
     test_build_config_skips_malformed_extra_routes_without_raising()
     test_fetch_upstreams_returns_parsed_json()

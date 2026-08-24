@@ -20,12 +20,6 @@ from health_service import health_service
 from stacks_service import stack_service
 from terminal_service import terminal_service
 
-# The dashboard's poll loop (STATUS_POLL_MS in App.tsx, every 5s) hits both
-# GET /stacks (the list) and GET /stacks/{name}/status (per stack) on every
-# tick - with dozens of stacks that's a continuous flood in `docker logs`,
-# drowning out anything that actually matters. Same deal for /health (hit
-# repeatedly by curl/monitoring). Root-caused once here rather than
-# special-cased per route.
 _NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks(?:/[^/ ]+/status)?|/health)(?:\?[^ ]*)? HTTP')
 
 
@@ -38,17 +32,6 @@ logging.getLogger("uvicorn.access").addFilter(_SuppressPollingAccessLogs())
 
 
 async def _watch_disconnect(websocket: WebSocket) -> None:
-    # A client that only receives (never sends) leaves us blocked on the
-    # next docker log line forever unless we watch for the disconnect frame
-    # concurrently instead of discovering it lazily on send.
-    #
-    # WebSocket.receive() is the raw ASGI-message-level call - unlike
-    # receive_text()/receive_bytes(), it does NOT raise WebSocketDisconnect
-    # itself on a "websocket.disconnect" message, it just returns it. Loop
-    # around calling it again and starlette raises a bare RuntimeError
-    # instead ("Cannot call receive once a disconnect message has been
-    # received."), which isn't WebSocketDisconnect and so isn't suppressed -
-    # it crashes out through the ASGI app instead. Raise it ourselves.
     with suppress(WebSocketDisconnect):
         while True:
             message = await websocket.receive()
@@ -61,13 +44,10 @@ async def lifespan(app: FastAPI):
     stack_service.scan()
     threading.Thread(target=stack_service.watch_forever, daemon=True).start()
     threading.Thread(target=health_service.watch_forever, daemon=True).start()
-    caddy_service.sync(stack_service.list_stacks())
+    caddy_service.sync_with_retry(stack_service.list_stacks())
     yield
 
 
-# docs_url/redoc_url/openapi_url off: a single-user home dashboard has no
-# audience for interactive API docs, and leaving them on is one more set of
-# unauthenticated bare routes for no benefit.
 app = FastAPI(title="litethaus", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(
@@ -78,18 +58,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Every real API route is registered on this router (mounted at "/api" below,
-# after all of them are defined) rather than directly on `app` - a route
-# registered bare (e.g. "/config") is matched by FastAPI regardless of what
-# any middleware does, so a literal "/api" prefix in the route table itself
-# is what actually keeps every API handler unreachable except through the
-# auth-gated "/api/*" path. A previous version relied on the middleware alone
-# (rewriting "/api/*" to a bare path before routing, and letting non-"/api/"
-# requests pass straight through) - since the handlers were *also* registered
-# at those same bare paths, hitting them directly (no "/api/" prefix) skipped
-# the auth check entirely. Only the SPA catch-all and the websocket routes
-# (hardcoded "/api/..." already, with their own inline auth check - the
-# middleware doesn't run for websocket upgrades) stay off this router.
 api = APIRouter()
 
 PUBLIC_PATHS = {"/api/health", "/api/auth/status", "/api/auth/setup", "/api/auth/login"}
@@ -97,18 +65,10 @@ PUBLIC_PATHS = {"/api/health", "/api/auth/status", "/api/auth/setup", "/api/auth
 
 @app.middleware("http")
 async def enforce_auth(request: Request, call_next):
-    # Anything outside "/api/" cannot be a real API route (see the `api`
-    # router above) - it's the SPA shell (index.html/JS/CSS) or a client-side
-    # route the SPA's own router handles, which must stay reachable
-    # unauthenticated so the login screen itself can load.
     path = request.url.path
     if not path.startswith("/api/"):
         return await call_next(request)
 
-    # Open by default until a password is actually set (first-run UX, like
-    # most self-hosted dashboards) or while auth_enabled is set to false in
-    # config.yaml (local testing); once configured, everything except the
-    # small public/auth surface requires a valid session cookie.
     if path in PUBLIC_PATHS or not auth_service.enabled() or not auth_service.is_configured():
         return await call_next(request)
     if not auth_service.is_valid_session(request.cookies.get(SESSION_COOKIE)):
@@ -117,11 +77,6 @@ async def enforce_auth(request: Request, call_next):
 
 
 def _set_session_cookie(request: Request, response: Response) -> None:
-    # Litehaus itself may be reached directly over HTTP (e.g. :8000 on the
-    # LAN) or via a TLS-terminating proxy in front of it - mark the cookie
-    # Secure whenever *this* request arrived over HTTPS, either directly or
-    # per the proxy's X-Forwarded-Proto, rather than hardcoding it to a
-    # config toggle that could drift from reality.
     secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     response.set_cookie(
         SESSION_COOKIE,
@@ -209,8 +164,6 @@ CADDY_RELEVANT_KEYS = {
 
 @api.patch("/config")
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
-    # auth credentials only ever change through the dedicated /auth endpoints,
-    # which hash the password before it touches config.yaml.
     patch = {k: v for k, v in patch.items() if k != "auth"}
     old = config_service.load()
     updated = config_service.update(patch)
@@ -225,10 +178,6 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
 
 
 def _redact_secrets(value: Any) -> Any:
-    # Caddy needs the plaintext Cloudflare token to do DNS-01 challenges, so
-    # build_config()/Caddy's own /config/ both legitimately contain it - but
-    # these two read endpoints feed a browser-visible panel, a new exposure
-    # surface the token never had when it only ever traveled server-to-server.
     if isinstance(value, dict):
         return {k: ("***redacted***" if k == "api_token" else _redact_secrets(v)) for k, v in value.items()}
     if isinstance(value, list):
@@ -340,7 +289,7 @@ def update_stack_raw(name: str, body: dict[str, Any]) -> dict[str, Any]:
 @api.patch("/stacks/{name}/metadata")
 def update_stack_metadata(name: str, body: dict[str, Any]) -> dict[str, Any]:
     _get_stack(name)
-    allowed = {"icon", "port", "domain", "service", "favorite", "lan_only", "passive_health_check"}
+    allowed = {"icon", "port", "domain", "service", "favorite", "lan_only", "passive_health_check", "auto_update"}
     patch = {k: v for k, v in body.items() if k in allowed}
     try:
         stack = stack_service.update_metadata(name, patch)
@@ -367,6 +316,7 @@ def stack_status(name: str) -> dict[str, Any]:
         "status": docker_service.status_from_details(details),
         "health": docker_service.summarize_health(details),
         "containers": details,
+        "update_available": health_service.update_available(name),
     }
 
 
@@ -400,23 +350,35 @@ def stack_restart(name: str) -> dict[str, Any]:
 @api.post("/stacks/{name}/update")
 def stack_update(name: str) -> dict[str, Any]:
     ok, output = docker_service.compose_update(_get_stack(name))
+    if ok:
+        health_service.clear_update_flag(name)
     caddy_service.sync(stack_service.list_stacks())
     return {"ok": ok, "output": output}
 
 
-# All routes above are only reachable at "/api/*" from here on - see the
-# `api` router's docstring-comment near its declaration for why that's load-
-# bearing, not cosmetic. Websocket routes below already hardcode "/api/..."
-# directly (the auth middleware doesn't run for websocket upgrades, so they
-# do their own inline session check instead).
+@api.post("/updates/run-now")
+def run_updates_now() -> dict[str, Any]:
+    results = health_service.run_auto_updates_now()
+    caddy_service.sync(stack_service.list_stacks())
+    return {"results": results}
+
+
+@api.post("/updates/auto-update-all")
+def set_auto_update_all(body: dict[str, Any]) -> dict[str, Any]:
+    enabled = bool(body.get("enabled"))
+    names = [
+        s.name for s in stack_service.list_stacks() if not s.error and docker_service.container_status(s) == "running"
+    ]
+    stack_service.update_metadata_bulk(names, {"auto_update": enabled or None})
+    caddy_service.sync(stack_service.list_stacks())
+    return {"ok": True, "count": len(names)}
+
+
 app.include_router(api, prefix="/api")
 
 
 @app.websocket("/api/stacks/{name}/logs")
 async def stack_logs(websocket: WebSocket, name: str, container: str | None = None) -> None:
-    # HTTP middleware doesn't run for websocket connections, so the session
-    # cookie (sent automatically on the same-origin upgrade request) needs
-    # its own check here.
     if auth_service.enabled() and auth_service.is_configured() and not auth_service.is_valid_session(websocket.cookies.get(SESSION_COOKIE)):
         await websocket.close(code=4401)
         return
@@ -427,8 +389,6 @@ async def stack_logs(websocket: WebSocket, name: str, container: str | None = No
         await websocket.close(code=4004)
         return
 
-    # `container`, when given, must resolve to an actual container of this
-    # stack - not trusted as a raw `docker logs` target.
     if container is not None and docker_service.find_container(stack, container) is None:
         await websocket.close(code=4004)
         return
@@ -436,11 +396,6 @@ async def stack_logs(websocket: WebSocket, name: str, container: str | None = No
     await websocket.accept()
 
     async def forward_logs() -> None:
-        # `docker compose logs -f`/`docker logs -f` exit as soon as there's
-        # nothing to tail (stack not up yet, or just stopped) rather than
-        # waiting for a container to appear. Re-attach instead of treating
-        # that as done, so a client watching a stopped stack picks up logs
-        # once it starts.
         while True:
             async with aclosing(docker_service.stream_logs(stack, container)) as lines:
                 async for line in lines:
@@ -471,8 +426,6 @@ async def stack_terminal(websocket: WebSocket, name: str, container: str) -> Non
         await websocket.close(code=4004)
         return
 
-    # `container` must resolve to an actual container of this stack - not
-    # trusted as a raw docker exec target.
     target = docker_service.find_container(stack, container)
     if target is None:
         await websocket.close(code=4004)
@@ -508,8 +461,6 @@ async def stack_terminal(websocket: WebSocket, name: str, container: str) -> Non
         with suppress(asyncio.CancelledError):
             await task
     session.unsubscribe(on_data)
-    # Session is deliberately left running - see terminal_service.py. Only
-    # disconnecting, not killing, is what makes the terminal persistent.
 
 
 @app.websocket("/api/caddy/logs")
@@ -544,10 +495,6 @@ async def caddy_logs(websocket: WebSocket) -> None:
             task.result()
 
 
-# Built frontend assets (backend/Dockerfile copies the Vite `dist/` build
-# here). Absent in dev (`uvicorn --reload`, no build step), so this route is
-# simply never registered there. Registered last so every "/api/*" route
-# above always matches first.
 STATIC_DIR = Path(__file__).parent / "static"
 
 if STATIC_DIR.is_dir():

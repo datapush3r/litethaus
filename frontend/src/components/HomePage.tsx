@@ -28,9 +28,6 @@ export function buildHomeEntries(
   for (const stack of stacks) {
     if (stack.error) continue
     if (statuses[stack.name] === 'stopped') continue
-    // One row per domain - a stack with multiple hostnames (e.g. a short
-    // alias alongside the full name) gets one launcher entry each, since
-    // every domain is an independently working way to reach it.
     for (const domain of domainList(stack.x_litethaus.domain)) {
       entries.push({
         key: `stack:${stack.name}:${domain}`,
@@ -50,10 +47,6 @@ export function buildHomeEntries(
   return entries
 }
 
-// Extracts every `host` string out of a caddy_extra_routes_json array, i.e.
-// every route shaped like {"match": [{"host": ["foo.example.com"]}], ...}.
-// Malformed JSON (or JSON that isn't an array) yields no hosts, same
-// silent-skip behavior as caddy_service.py's own fallback server-side.
 function extractExtraRouteHosts(extraRoutesJson: string): string[] {
   if (!extraRoutesJson.trim()) return []
   let parsed: unknown

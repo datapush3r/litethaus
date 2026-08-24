@@ -12,9 +12,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Points the docker CLI's config dir at the tmpfs below instead of the
-      # (read-only) image's /root, so `docker`/`docker compose` subprocess
-      # calls can't hit a permission error trying to write $HOME/.docker.
       - HOME=/tmp
     read_only: true
     tmpfs:
@@ -22,12 +19,6 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      # scan() walks every entry under stacks_dir looking for compose files,
-      # including dirs it has no business reading (permission errors on
-      # someone else's directory). Root normally bypasses those checks via
-      # CAP_DAC_OVERRIDE, which cap_drop: ALL also strips - restored (only
-      # these two, not ALL) so a restrictive directory it merely stat()s
-      # doesn't crash startup.
       - DAC_OVERRIDE
       - DAC_READ_SEARCH
     security_opt:
@@ -45,8 +36,6 @@ services:
       - caddy_config:/config
     command: caddy run --config /etc/caddyfile
     ports:
-      # Staging port while NPM still owns host 443 - flip to "443:443" only
-      # at the atomic cutover once every domain is validated (see plan).
       - "8443:443"
     expose:
       - "2019"
@@ -57,7 +46,6 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      # Lets the non-root user above still bind :80/:443.
       - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true

@@ -48,8 +48,6 @@ def test_guess_skips_candidates_shorter_than_three_chars() -> None:
 
 def test_guess_prefers_first_candidate_with_an_exact_hit_over_fuzzy_matches_on_earlier_ones() -> None:
     svc = _service_with_fake_catalog()
-    # "plexy" only fuzzy-matches "plex"; "npm" is an exact hit further down the list -
-    # exact beats fuzzy regardless of candidate order.
     assert svc.guess(["plexy", "npm"]) == "nginx-proxy-manager"
 
 
@@ -60,10 +58,6 @@ def test_guess_returns_none_when_catalog_fetch_fails() -> None:
 
 
 def test_guess_does_not_block_on_a_slow_fetch() -> None:
-    # guess() must return immediately and let the fetch happen on a
-    # background thread - a caller (in particular stack_service.scan(),
-    # which runs synchronously during app startup) must never stall on
-    # network I/O here.
     svc = IconService()
     with patch("icon_service.urllib.request.urlopen", side_effect=lambda *a, **k: time.sleep(0.3)):
         start = time.monotonic()
@@ -72,8 +66,6 @@ def test_guess_does_not_block_on_a_slow_fetch() -> None:
 
 
 def test_failed_fetch_does_not_permanently_poison_the_catalog() -> None:
-    # A failed fetch clears the in-progress flag (rather than caching an
-    # empty catalog forever), so the next guess() call can retry.
     svc = IconService()
     with patch("icon_service.urllib.request.urlopen", side_effect=OSError("no network")):
         svc._fetch()

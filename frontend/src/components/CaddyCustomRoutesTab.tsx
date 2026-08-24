@@ -2,10 +2,6 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { fetchConfig, updateConfig } from '../api'
 
-// Mirrors caddy_service.py's LAN_ONLY_RANGES - re-emitted whenever a route
-// edited here has "LAN only" checked, normalizing any hand-authored route
-// that predates that constant (older/narrower ranges silently excluded
-// Docker-internal callers too - see caddy_service.py's own comment).
 const LAN_ONLY_RANGES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
 
 interface SimpleRoute {
@@ -16,12 +12,6 @@ interface SimpleRoute {
   insecureTls: boolean
 }
 
-// A "simple" custom route is exactly: one or more hostnames matched to one
-// reverse_proxy handler dialing one upstream, with an optional LAN-only
-// remote_ip restriction and an optional self-signed-HTTPS-backend transport.
-// Anything else (multiple handlers, subroutes/redirects, multiple upstreams,
-// unrecognized matcher/transport shapes) is left untouched and passed
-// through on save rather than risking silently mangling or dropping it.
 function parseSimpleRoute(route: unknown, index: number): SimpleRoute | null {
   if (typeof route !== 'object' || route === null) return null
   const r = route as Record<string, unknown>
@@ -95,7 +85,6 @@ export function CaddyCustomRoutesTab({ onSaved }: CaddyCustomRoutesTabProps) {
           const arr = JSON.parse(raw)
           if (Array.isArray(arr)) parsed = arr
         } catch {
-          /* malformed JSON - treat as empty rather than block this tab */
         }
       }
       const simple: SimpleRoute[] = []

@@ -98,7 +98,6 @@ def test_lockout_is_scoped_per_remote_addr() -> None:
         for _ in range(MAX_LOGIN_ATTEMPTS):
             svc.verify_login("admin", "wrong password", "1.2.3.4")
 
-        # a different address is unaffected by 1.2.3.4's lockout
         assert svc.verify_login("admin", "correct horse battery staple", "5.6.7.8") is True
 
 
@@ -110,8 +109,6 @@ def test_successful_login_clears_failed_attempt_counter() -> None:
         svc.verify_login("admin", "wrong password", "1.2.3.4")
         assert svc.verify_login("admin", "correct horse battery staple", "1.2.3.4") is True
 
-        # the earlier failure was cleared, so a fresh run of failures still
-        # takes MAX_LOGIN_ATTEMPTS tries to lock out again
         for _ in range(MAX_LOGIN_ATTEMPTS - 1):
             assert svc.verify_login("admin", "wrong password", "1.2.3.4") is False
         assert svc.verify_login("admin", "correct horse battery staple", "1.2.3.4") is True

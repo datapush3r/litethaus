@@ -25,6 +25,7 @@ import { StackDetail } from './components/StackDetail'
 import { StackEditor } from './components/StackEditor'
 import { SettingsPage } from './components/SettingsPage'
 import { Sidebar } from './components/Sidebar'
+import { UpdatesPage } from './components/UpdatesPage'
 import { parseRoute, routePath, type Route } from './routing'
 import { setThemePreference } from './theme'
 
@@ -83,10 +84,6 @@ function App() {
     )
   }
 
-  // "not configured yet" is intentionally reported as authenticated=true by
-  // the backend (so a fresh install is API-usable without a chicken-and-egg
-  // login), but the UI still needs to prompt for setup rather than skipping
-  // straight past onboarding into the dashboard.
   if (!authStatus.configured) {
     return <AuthScreen mode="setup" onAuthenticated={checkAuth} />
   }
@@ -127,10 +124,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   const refreshStacks = useCallback(async () => {
     const list = await fetchStacks()
-    // Statuses resolve before stacks are published to state - otherwise
-    // there's a render where statuses is still {}, every stack ties at the
-    // same sort rank, and the sidebar's "sort by state" falls through to
-    // its name tie-breaker, flashing an alphabetical order for an instant.
     await refreshStatuses(list)
     setStacks(list)
   }, [refreshStatuses])
@@ -148,8 +141,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       try {
         const list = await fetchStacks()
         if (cancelled) return
-        // Same ordering as refreshStacks() above - avoids the same
-        // sort-flash on first load, not just on later refreshes.
         await refreshStatuses(list)
         if (cancelled) return
         setStacks(list)
@@ -165,7 +156,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         setHttpsPort(Number(cfg.https_port ?? 443))
         setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? ''))
       } catch {
-        /* fall back to whatever theme.ts's default already applied */
       }
     }
 
@@ -234,9 +224,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         ? 'Settings'
         : route.view === 'caddy'
           ? 'Caddy'
-          : route.view === 'new'
-            ? 'New Stack'
-            : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
+          : route.view === 'updates'
+            ? 'Updates'
+            : route.view === 'new'
+              ? 'New Stack'
+              : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -259,6 +251,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         onOpenHome={() => navigate({ view: 'home' })}
         onOpenSettings={() => navigate({ view: 'settings' })}
         onOpenCaddy={() => navigate({ view: 'caddy' })}
+        onOpenUpdates={() => navigate({ view: 'updates' })}
         onNewStack={() => navigate({ view: 'new' })}
         onLogout={() => authLogout().then(onLogout)}
       />
@@ -326,6 +319,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           {route.view === 'settings' && <SettingsPage />}
 
           {route.view === 'caddy' && <CaddyPage stacks={stacks ?? []} onStacksChanged={refreshStacks} />}
+
+          {route.view === 'updates' && (
+            <UpdatesPage stacks={stacks ?? []} statuses={statuses} health={health} onStacksChanged={refreshStacks} />
+          )}
 
           {route.view === 'new' && (
             <StackEditor
@@ -396,6 +393,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   httpsPort={httpsPort}
                   status={statuses[stack.name] ?? null}
                   health={health[stack.name]?.health ?? null}
+                  updateAvailable={health[stack.name]?.update_available ?? false}
                   busy={!!busy[stack.name]}
                   layout={viewMode}
                   favorite={!!stack.x_litethaus.favorite}

@@ -16,12 +16,15 @@ export interface ContainerInfo {
   state: string
   health: string | null
   restart_count: number
+  image: string
+  created: string
 }
 
 export interface StackStatus {
   status: StackState
   health: HealthState
   containers: ContainerInfo[]
+  update_available: boolean
 }
 
 export async function fetchStacks(): Promise<Stack[]> {
@@ -62,6 +65,20 @@ export async function stackRestart(name: string): Promise<{ ok: boolean; output:
 
 export async function stackUpdate(name: string): Promise<{ ok: boolean; output: string }> {
   const res = await fetch(`/api/stacks/${name}/update`, { method: 'POST' })
+  return res.json()
+}
+
+export async function runUpdatesNow(): Promise<{ results: { stack: string; ok: boolean }[] }> {
+  const res = await fetch('/api/updates/run-now', { method: 'POST' })
+  return res.json()
+}
+
+export async function setAutoUpdateAll(enabled: boolean): Promise<{ ok: boolean; count: number }> {
+  const res = await fetch('/api/updates/auto-update-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
   return res.json()
 }
 
@@ -107,6 +124,7 @@ export async function updateStackMetadata(
     service?: string | null
     favorite?: boolean | null
     lan_only?: boolean | null
+    auto_update?: boolean | null
   }
 ): Promise<Stack> {
   const res = await fetch(`/api/stacks/${name}/metadata`, {
@@ -152,6 +170,8 @@ export interface Config {
   theme: string
   webhook_url: string
   healthchecks_url: string
+  update_check_enabled: boolean
+  auto_update_time: string
   [key: string]: unknown
 }
 
@@ -159,20 +179,12 @@ export function stackUrl(domain: string, httpsPort: number): string {
   return httpsPort === 443 ? `https://${domain}` : `https://${domain}:${httpsPort}`
 }
 
-// A stack's x_litethaus.domain is a plain string for the common single-domain
-// case, or a list of strings once given more than one hostname for the same
-// upstream (e.g. "frigate.example.com" + "f.example.com"). Mirrors the
-// backend's _domain_list in caddy_service.py.
 export function domainList(domain: unknown): string[] {
   if (typeof domain === 'string') return domain ? [domain] : []
   if (Array.isArray(domain)) return domain.filter((d): d is string => typeof d === 'string' && !!d)
   return []
 }
 
-// Turns a comma-separated domain input's raw text into the value to PATCH
-// /stacks/{name}/metadata with: null clears the field, a single hostname
-// stays a plain string (unchanged on-disk format for the common case), more
-// than one becomes a list. Mirrors the read side's domainList().
 export function domainPatchValue(text: string): string[] | string | null {
   const domains = text
     .split(',')

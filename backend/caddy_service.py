@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any
@@ -10,19 +11,10 @@ from stacks_service import Stack
 
 logger = logging.getLogger(__name__)
 
-# Applied to a stack's route when its .litethaus.yaml sets lan_only: true -
-# same private-address ranges a typical LAN-allowlist reverse-proxy rule uses.
-# 172.16.0.0/12 (not /16) is the actual RFC1918 block - it's also what
-# Docker's default bridge network hands out (e.g. 172.17.0.0/16), so the
-# narrower range was silently excluding Docker-internal callers too.
 LAN_ONLY_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
 
 def _domain_list(domain: Any) -> list[str]:
-    # A stack's `domain` metadata is a plain string for the common
-    # single-domain case (unchanged on-disk format for existing sidecars),
-    # or a list of strings once a stack is given more than one hostname
-    # (e.g. "frigate.example.com" + "f.example.com" for the same upstream).
     if isinstance(domain, str):
         return [domain] if domain else []
     if isinstance(domain, list):
@@ -45,16 +37,10 @@ class CaddyService:
         return {"enabled": config_service.load().get("caddy_enabled", True), **(self._last_sync or {})}
 
     def fetch_live_config(self) -> dict[str, Any]:
-        # Proxies Caddy's own /config/ so the UI can show what Caddy is
-        # actually running, not just what we last tried to push - also
-        # doubles as a reachability check (raises if Caddy can't be reached).
         with urllib.request.urlopen(f"{self.admin_url}/config/", timeout=5) as resp:
             return json.load(resp)
 
     def fetch_upstreams(self) -> list[dict[str, Any]]:
-        # Caddy's reverse_proxy handler always tracks passive upstream health
-        # (request/fail counts) with zero extra config - this just surfaces
-        # it for the Routes tab's live-health columns.
         with urllib.request.urlopen(f"{self.admin_url}/reverse_proxy/upstreams", timeout=5) as resp:
             return json.load(resp)
 
@@ -98,21 +84,10 @@ class CaddyService:
                 "handler": "reverse_proxy",
                 "upstreams": [{"dial": f"{upstream_service}:{port}"}],
             }
-            # Opt-in per stack: ejects an upstream from rotation for 30s after
-            # a failed request. Off by default since it changes live traffic
-            # routing for every stack, not just the ones someone's watching -
-            # a single transient blip takes the backend out for 30s.
             if meta.get("passive_health_check"):
                 handler["health_checks"] = {"passive": {"fail_duration": "30s"}}
             handle: list[dict[str, Any]] = []
             if security_headers_enabled:
-                # Caddy's "headers" handler defers its response header ops
-                # until the response is actually written, so it works
-                # correctly listed before reverse_proxy in the chain - same
-                # as Caddyfile's `header` directive, order-independent.
-                # X-Frame-Options is SAMEORIGIN rather than DENY because
-                # some self-hosted dashboards embed each other in iframes;
-                # opt-in and off by default for the same reason.
                 header_set: dict[str, list[str]] = {
                     "X-Content-Type-Options": ["nosniff"],
                     "X-Frame-Options": ["SAMEORIGIN"],
@@ -134,16 +109,6 @@ class CaddyService:
                 logger.exception("Failed to parse caddy_extra_routes_json, skipping")
 
         if https_mode == "acme" and wildcard_domain:
-            # Caddy only requests a cert for whatever literal hostname string
-            # it sees in a route's host matcher - every route above uses an
-            # exact FQDN, so Caddy never once sees "*.<wildcard_domain>" and
-            # never actually requests the wildcard cert the automation policy
-            # below allows, issuing a separate leaf cert per subdomain instead.
-            # This catch-all (placed last, so it never shadows a real route)
-            # makes Caddy discover and obtain the real wildcard cert once;
-            # cert selection at handshake time then matches any subdomain's
-            # SNI against it. Doubles as a proper 404 for any unmapped
-            # subdomain instead of the default blank 200.
             routes.append(
                 {
                     "match": [{"host": [f"*.{wildcard_domain}"]}],
@@ -151,19 +116,9 @@ class CaddyService:
                 }
             )
 
-        # When HTTPS is on, listen on :443 only and let Caddy's automatic_https
-        # feature synthesize the :80 -> :443 redirect itself. If we listened on
-        # :80 ourselves with these same host-matched routes, our own route would
-        # shadow that redirect and serve plaintext HTTP right alongside HTTPS.
         listen = [":443"] if https_mode != "off" else [":80"]
 
         config: dict[str, Any] = {
-            # A JSON config pushed via /load that omits "admin" resets the
-            # listener to Caddy's built-in default (localhost:2019), which
-            # cuts the backend off from Caddy's admin API on the very next
-            # sync (it reaches Caddy over the docker network, not loopback).
-            # Pinning it here keeps it stable across every reload; it must
-            # match the Caddyfile's `{admin 0.0.0.0:2019}` bootstrap value.
             "admin": {"listen": "0.0.0.0:2019"},
             "apps": {
                 "http": {
@@ -171,11 +126,6 @@ class CaddyService:
                         "litethaus": {
                             "listen": listen,
                             "routes": routes,
-                            # h2/h3 (advertised via Alt-Svc) cause some media-streaming
-                            # clients - e.g. Plex on Android TV - to hang mid-stream with
-                            # broken-pipe/stream-closed errors on large range-request
-                            # bodies. h1-only fixed a live streaming session during
-                            # rollout; no real downside for a home reverse proxy.
                             "protocols": ["h1"],
                         }
                     }
@@ -183,18 +133,11 @@ class CaddyService:
             }
         }
 
-        # Caddy defaults to ACME for anything listening on :443, so "internal"
-        # mode must be spelled out explicitly to get self-signed certs instead
-        # (the right default for .home.arpa/.local domains with no public DNS).
         if https_mode == "internal":
             config["apps"]["tls"] = {"automation": {"policies": [{"subjects": domains, "issuers": [{"module": "internal"}]}]}}
         elif https_mode == "acme":
             issuer: dict[str, Any] = {"module": "acme", "email": acme_email}
             if cloudflare_api_token:
-                # Explicit resolvers, not the container's default (which may
-                # be a home router doing split-horizon DNS): Caddy's zone/SOA
-                # lookup and propagation checks need to see the real public
-                # DNS, not a LAN-only override of the challenge domain.
                 issuer["challenges"] = {
                     "dns": {
                         "provider": {"name": "cloudflare", "api_token": cloudflare_api_token},
@@ -205,11 +148,6 @@ class CaddyService:
             config["apps"]["tls"] = {"automation": {"policies": [{"subjects": subjects, "issuers": [issuer]}]}}
 
         if access_log_enabled:
-            # {} turns on access logging using Caddy's default logger, which
-            # writes to stderr - already captured by `docker logs`/our own
-            # stream_container_logs(), same as every other container's
-            # stdout+stderr. Revisit with an explicit encoder/writer only if
-            # manual testing (see Task 6) shows the default format is unusable.
             config["apps"]["http"]["servers"]["litethaus"]["logs"] = {}
 
         return config
@@ -241,6 +179,17 @@ class CaddyService:
             self._last_sync = {"ok": False, "at": datetime.now(timezone.utc).isoformat(), "error": str(exc)}
         else:
             self._last_sync = {"ok": True, "at": datetime.now(timezone.utc).isoformat(), "error": None}
+
+    def sync_with_retry(self, stacks: list[Stack], attempts: int = 6, delay: float = 5) -> None:
+        # ponytail: startup-only guard against the Caddy container not being reachable yet
+        # (it loses its whole route config on every restart - see caddy/Dockerfile notes) -
+        # not used by steady-state callers, which should surface a real outage immediately.
+        for attempt in range(attempts):
+            self.sync(stacks)
+            if (self._last_sync or {}).get("ok", True):
+                return
+            if attempt < attempts - 1:
+                time.sleep(delay)
 
 
 caddy_service = CaddyService()

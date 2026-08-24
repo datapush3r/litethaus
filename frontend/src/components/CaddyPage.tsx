@@ -18,8 +18,6 @@ import { CaddyRoutesTab } from './CaddyRoutesTab'
 import { JsonEditor } from './JsonEditor'
 import { TabBar } from './TabBar'
 
-// Config is stored as compact JSON; reformat it for humans to read/edit.
-// Falls back to the raw string on parse failure - errors show up in the editor's lint gutter instead.
 function prettify(raw: string): string {
   if (!raw.trim()) return raw
   try {

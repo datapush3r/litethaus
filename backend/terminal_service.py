@@ -8,12 +8,6 @@ SCROLLBACK_BYTES = 64 * 1024
 
 
 class TerminalSession:
-    # One real `docker exec` shell per container, kept alive across
-    # websocket disconnects so navigating away and back (or a reload)
-    # re-attaches instead of spawning a fresh shell - the "persistent
-    # terminal" ask. A background thread drains the pty continuously so the
-    # shell never blocks on a full pty buffer while nobody's connected, and
-    # feeds a bounded scrollback that's replayed to whoever (re)subscribes.
     def __init__(self, container_name: str) -> None:
         self.master_fd, self.process = docker_service.exec_shell(container_name)
         self.closed = False
@@ -39,7 +33,6 @@ class TerminalSession:
         self.process.wait()
 
     def subscribe(self, on_data: Callable[[bytes], None]) -> bytes:
-        # Registers for future output; returns scrollback-so-far to replay.
         with self._lock:
             self._subscribers.add(on_data)
             return bytes(self._scrollback)
@@ -53,11 +46,6 @@ class TerminalSession:
 
 
 class TerminalService:
-    # ponytail: sessions are never evicted on their own - a container that
-    # stops kills its `docker exec` shell (pty read hits EOF, closed=True),
-    # but a live, unwatched shell for a still-running container sits around
-    # forever. Fine at homelab container counts; add an idle-timeout reaper
-    # if this ever needs to scale.
     def __init__(self) -> None:
         self._sessions: dict[str, TerminalSession] = {}
         self._lock = threading.Lock()

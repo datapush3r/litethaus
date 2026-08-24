@@ -72,6 +72,18 @@ wildcard_domain: ""
 # touches proxied/TTL. Leave empty to disable.
 ddns_domains: []
 
+# Background check for newer container images on each running stack (12h
+# interval) - replaces watchtower's blanket auto-update with visibility
+# only. Never recreates a container by itself; the manual Update button on
+# each stack still does that. Set false to disable the check entirely.
+update_check_enabled: true
+
+# Time of day (24h "HH:MM", local time) the auto-update pass runs. Only
+# touches stacks with auto_update: true set in their own .litethaus.yaml
+# (opt-in, off by default) - everything else stays check-only, same as the
+# manual Update button. Requires update_check_enabled above.
+auto_update_time: "03:00"
+
 # Advanced: raw Caddy route objects (JSON array) appended after the routes
 # litethaus generates per-stack, for cases the domain/port/service model
 # doesn't cover. Leave blank to skip. Invalid JSON is ignored (logged) rather

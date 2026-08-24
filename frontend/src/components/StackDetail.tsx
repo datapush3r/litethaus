@@ -158,7 +158,6 @@ export function StackDetail({
     try {
       await updateStackMetadata(stack.name, patch)
       onSaved()
-      // keep the raw YAML editor in sync, but only if the user has no unsaved edits in it
       if (draftContent === rawContent) {
         const content = await fetchStackRaw(stack.name, effectiveFile ?? undefined)
         setRawContent(content)
@@ -390,9 +389,6 @@ export function StackDetail({
             <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">{stack.services.join(', ') || '—'}</dd>
           </div>
           {(() => {
-            // Primary domain only - if a domain briefly has two live certs
-            // (mid rotation), or a stack has multiple domains, only one
-            // expiry shows here.
             const cert = primaryDomain ? certs.find((c) => c.domains.includes(primaryDomain)) : undefined
             if (!primaryDomain || !cert) return null
             return (

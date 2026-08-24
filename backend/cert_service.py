@@ -11,9 +11,6 @@ logger = logging.getLogger(__name__)
 
 _PEM_BLOCK = re.compile(rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", re.DOTALL)
 
-# Where Caddy's file storage module keeps ACME/internal-CA-issued leaf certs
-# inside its container - see caddy/Dockerfile and docker-compose's caddy_data
-# volume. Not configurable; it's Caddy's own fixed layout.
 CADDY_CERT_DIR = "/data/caddy/certificates"
 
 

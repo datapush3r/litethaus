@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { StackIcon } from './StackIcon'
 
-// Same source as StackIcon.tsx - https://github.com/homarr-labs/dashboard-icons
 const METADATA_URL = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@main/metadata.json'
 const RESULT_LIMIT = 200
 
@@ -10,7 +9,6 @@ interface IconMeta {
   aliases?: string[]
 }
 
-// Module-level cache: the icon list is ~1MB and identical for every stack, so fetch it once per session.
 let metadataPromise: Promise<Record<string, IconMeta>> | null = null
 
 function loadIconMetadata(): Promise<Record<string, IconMeta>> {

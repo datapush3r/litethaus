@@ -12,8 +12,6 @@ TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace"
 
 
 def get_public_ip() -> str | None:
-    # Cloudflare's own trace endpoint - same vendor already trusted for DNS,
-    # no new third-party IP-echo service introduced.
     try:
         with urllib.request.urlopen(TRACE_URL, timeout=5) as resp:
             body = resp.read().decode()
@@ -47,9 +45,6 @@ def _cf_request(token: str, path: str, method: str = "GET", body: dict[str, Any]
 
 
 def find_zone_id(token: str, domain: str) -> str | None:
-    # ponytail: single page of zones (Cloudflare's default page size is 20) -
-    # fine for a personal account with a handful of zones; add pagination if
-    # you ever have more than that.
     data = _cf_request(token, "/zones")
     best: str | None = None
     best_len = -1
@@ -65,9 +60,6 @@ def find_record(token: str, zone_id: str, domain: str) -> dict[str, Any] | None:
     data = _cf_request(token, f"/zones/{zone_id}/dns_records?type=A&name={urllib.parse.quote(domain)}")
     results = data.get("result") or []
     if len(results) > 1:
-        # Cloudflare doesn't guarantee result ordering - guessing which of
-        # multiple A records (round-robin DNS) to update risks flip-flopping
-        # between them. Error instead, matching the zero-records posture.
         raise RuntimeError(f"multiple A records found for {domain}, refusing to guess which to update")
     return results[0] if results else None
 

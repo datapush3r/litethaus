@@ -6,9 +6,6 @@ from terminal_service import TerminalService
 
 
 def _fake_exec_shell(container_name: str):
-    # Stands in for docker_service.exec_shell(): a real pty pair we can
-    # write to/read from directly, plus a Popen-shaped mock (only .wait()
-    # is used by TerminalSession, once the pty hits EOF).
     master_fd, slave_fd = os.openpty()
     process = Mock()
     process.wait = Mock()
@@ -20,14 +17,14 @@ def test_reconnect_reuses_session_and_replays_scrollback() -> None:
     with patch("terminal_service.docker_service.exec_shell", return_value=(master_fd, process)):
         svc = TerminalService()
         session = svc.get_or_create("c1")
-        assert svc.get_or_create("c1") is session  # reused, not respawned
+        assert svc.get_or_create("c1") is session
 
         os.write(slave_fd, b"hello\n")
-        time.sleep(0.05)  # let the background pump thread drain the pty
+        time.sleep(0.05)
 
         received: list[bytes] = []
         backlog = session.subscribe(received.append)
-        assert backlog == b"hello\r\n"  # pty output processing turns \n into \r\n
+        assert backlog == b"hello\r\n"
 
         os.write(slave_fd, b"world\n")
         time.sleep(0.05)
@@ -41,7 +38,7 @@ def test_session_reopens_after_shell_exits() -> None:
     with patch("terminal_service.docker_service.exec_shell", return_value=(master_fd, process)):
         svc = TerminalService()
         first = svc.get_or_create("c2")
-        os.close(slave_fd)  # pty EOF - shell "exited"
+        os.close(slave_fd)
         time.sleep(0.05)
         assert first.closed
 

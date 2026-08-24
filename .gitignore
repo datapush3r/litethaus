@@ -1,25 +1,39 @@
+# Whitelist approach: ignore everything by default, then explicitly
+# un-ignore what belongs in the repo (code + README + build/deploy
+# infra). Anything not listed below - docs, plans, specs, local
+# scratch files, host-specific config - stays out.
+*
+
+!/.gitignore
+!/.dockerignore
+!/README.md
+!/dashboard-stack.png
+
+!/.github/
+!/.github/**
+
+!/backend/
+!/backend/**
+
+!/caddy/
+!/caddy/**
+
+!/frontend/
+!/frontend/**
+
+!/docker-compose.yaml
+!/docker-compose.dev.yaml
+!/docker-compose.prod.yaml
+
+# Build artifacts / caches / local env inside whitelisted trees.
 __pycache__/
 *.pyc
 .venv/
+frontend/node_modules/
+frontend/dist/
 docker-compose.override.local.yaml
 
-# Live instance data - host-specific config/stacks from running the dev
-# sandbox, not seed data.
-config/
-
-# Scratch todo list, not for the public repo.
-TODO
-
-# Agent-facing project instructions - kept local/private, not shipped
-# in the public repo.
-CLAUDE.md
-
-# Personal deploy helper - hardcodes this host's /docker/litethaus*
-# paths, not portable, not shipped in the public repo.
-scripts/deploy.sh
-
-# Secrets - nothing like this exists in the repo today, but ignored
-# proactively so a future mistake doesn't get committed.
+# Secrets - proactive, nothing like this exists today.
 .env
 .env.*
 *.pem
@@ -28,5 +42,5 @@ id_rsa*
 id_ed25519*
 *credentials*
 
-# Playwright MCP session output (screenshots, snapshots, console logs)
+# Playwright MCP session output.
 .playwright-mcp/

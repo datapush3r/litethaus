@@ -10,6 +10,7 @@ interface StackCardProps {
   httpsPort: number
   status: StackState | null
   health: HealthState | null
+  updateAvailable: boolean
   busy: boolean
   layout: 'grid' | 'list'
   favorite: boolean
@@ -26,6 +27,7 @@ export function StackCard({
   httpsPort,
   status,
   health,
+  updateAvailable,
   busy,
   layout,
   favorite,
@@ -37,9 +39,6 @@ export function StackCard({
   onDeleted,
 }: StackCardProps) {
   const [deleting, setDeleting] = useState(false)
-  // Card space is tight (grid tiles especially) - show only the primary
-  // (first-listed) domain here; the full list is editable on the stack's
-  // detail page, and the homepage launcher lists every domain separately.
   const domain = domainList(stack.x_litethaus.domain)[0] ?? null
 
   async function handleDelete() {
@@ -82,7 +81,6 @@ export function StackCard({
   const canRestart = !busy && !stack.error && status === 'running'
   const canDelete = !deleting && status === 'stopped'
 
-  // Icon-only action row for grid tiles (space is tight); labeled buttons for list rows.
   function iconActions() {
     return (
       <div className="flex items-center gap-1">
@@ -116,11 +114,14 @@ export function StackCard({
             onUpdate()
           }}
           disabled={busy || !!stack.error}
-          title="Pull latest images and recreate containers"
+          title={updateAvailable ? 'Update available - pull latest images and recreate containers' : 'Pull latest images and recreate containers'}
           aria-label="Update"
-          className="rounded border border-neutral-300 p-1.5 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          className="relative rounded border border-neutral-300 p-1.5 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
         >
           <Download size={14} />
+          {updateAvailable && (
+            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-500" />
+          )}
         </button>
         <button
           onClick={(e) => {
@@ -168,10 +169,13 @@ export function StackCard({
             onUpdate()
           }}
           disabled={busy || !!stack.error}
-          title="Pull latest images and recreate containers"
-          className="rounded border border-neutral-300 px-2 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          title={updateAvailable ? 'Update available - pull latest images and recreate containers' : 'Pull latest images and recreate containers'}
+          className="relative rounded border border-neutral-300 px-2 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
         >
           Update
+          {updateAvailable && (
+            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-500" />
+          )}
         </button>
         <button
           onClick={(e) => {

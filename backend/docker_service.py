@@ -73,6 +73,24 @@ class DockerService:
         up = subprocess.run(self._compose_cmd(stack, "up", "-d"), capture_output=True, text=True)
         return up.returncode == 0, pull.stdout + pull.stderr + up.stdout + up.stderr
 
+    def compose_check_update(self, stack: Stack) -> bool:
+        pull = subprocess.run(self._compose_cmd(stack, "pull"), capture_output=True, text=True)
+        if pull.returncode != 0:
+            logger.warning("update check pull failed for %s: %s", stack.name, pull.stderr)
+            return False
+        containers = self.client.containers.list(
+            filters={"label": f"com.docker.compose.project={self._project_name(stack)}"}
+        )
+        for container in containers:
+            image_ref = container.attrs["Config"]["Image"]
+            try:
+                fresh = self.client.images.get(image_ref)
+            except NotFound:
+                continue
+            if fresh.id != container.image.id:
+                return True
+        return False
+
     async def _stream_process_lines(self, cmd: list[str]) -> AsyncIterator[str]:
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -90,11 +108,6 @@ class DockerService:
                 process.terminate()
 
     async def stream_logs(self, stack: Stack, container: str | None = None) -> AsyncIterator[str]:
-        # A single container's logs are streamed directly via `docker logs`
-        # rather than `docker compose logs <service>` - the caller already
-        # resolves `container` to an actual container name (see
-        # find_container()), which docker logs takes directly with no need
-        # to also know the service name from the compose file.
         cmd = (
             ["docker", "logs", "-f", "--tail", "100", container]
             if container
@@ -104,8 +117,6 @@ class DockerService:
             yield line
 
     async def stream_container_logs(self, container_name: str) -> AsyncIterator[str]:
-        # Same as stream_logs(container=...) above but for a container that
-        # isn't part of any litethaus-scanned stack - i.e. Caddy itself.
         async for line in self._stream_process_lines(["docker", "logs", "-f", "--tail", "100", container_name]):
             yield line
 
@@ -124,12 +135,6 @@ class DockerService:
         return None
 
     def find_caddy_container(self) -> Any | None:
-        # Caddy isn't a scanned "stack" (it's not under stacks_dir), so it has
-        # no project label to filter by the way container_details() does.
-        # Compose always sets com.docker.compose.service=caddy regardless of
-        # an explicit container_name: override, so that's the reliable
-        # zero-config match; caddy_container_name in config.yaml is only for
-        # the rare case Caddy runs outside litethaus's own Compose project.
         override = self._config.load().get("caddy_container_name") or ""
         if override:
             try:
@@ -140,10 +145,6 @@ class DockerService:
         if not containers:
             return None
         if len(containers) > 1:
-            # ponytail: host-wide label match isn't scoped to litethaus's own
-            # compose project, so >1 hit is possible if another stack names a
-            # service "caddy". Deterministic pick + a log line to grep is the
-            # cheap mitigation; scoping the label query properly is the real fix.
             logger.warning(
                 "Multiple containers matched %s: %s - picking alphabetically first",
                 CADDY_SERVICE_LABEL,
@@ -152,26 +153,11 @@ class DockerService:
         return sorted(containers, key=lambda c: c.name)[0]
 
     def exec_run(self, container_name: str, cmd: list[str]) -> tuple[int, bytes]:
-        # One-off non-interactive exec via docker-py's high-level exec_run -
-        # a genuinely different code path from exec_shell()'s CLI+pty socket
-        # workaround above (that EOF bug was specific to the low-level
-        # client.api.exec_start(..., socket=True) hijack; exec_run() doesn't
-        # use it).
         container = self.client.containers.get(container_name)
         result = container.exec_run(cmd)
         return result.exit_code, result.output
 
     def exec_shell(self, container_name: str) -> tuple[int, subprocess.Popen]:
-        # Shells out to the `docker` CLI over a real pty, same approach as
-        # stream_logs() below - docker-py's low-level exec socket hijack
-        # (client.api.exec_start(..., socket=True)) delivers an immediate
-        # EOF on first read in this environment for reasons that didn't
-        # trace back to anything in our control; the CLI+pty path is what
-        # every terminal emulator does anyway and just works.
-        # Falls back to sh on minimal (alpine) images that have no bash.
-        # `command -v bash && exec bash || exec sh` (not `exec bash || exec
-        # sh`) - in POSIX shells, exec failing to find its target terminates
-        # the shell immediately rather than falling through to `||`.
         master_fd, slave_fd = pty.openpty()
         process = subprocess.Popen(
             ["docker", "exec", "-i", "-t", container_name, "sh", "-c",
@@ -191,6 +177,8 @@ class DockerService:
             "state": container.status,
             "health": health,
             "restart_count": container.attrs.get("RestartCount", 0),
+            "image": (container.attrs.get("Config") or {}).get("Image", ""),
+            "created": container.attrs.get("Created", ""),
         }
 
     def container_status(self, stack: Stack) -> str:
@@ -211,9 +199,6 @@ class DockerService:
     def summarize_health(details: list[dict[str, Any]]) -> str:
         if not details:
             return "unknown"
-        # A container's own "restarting" state is Docker's live signal for a
-        # restart loop - more reliable than RestartCount, which is a lifetime
-        # total that never resets and says nothing about "right now".
         if "restarting" in {d["state"] for d in details}:
             return "restarting"
         healths = {d["health"] for d in details if d["health"] is not None}

@@ -5,10 +5,6 @@ from unittest.mock import patch
 
 from stacks_service import StackService, _icon_candidates, _image_basename
 
-# None of these tests exercise icon-guessing itself, so auto-icon is patched
-# off throughout to keep them offline and deterministic (real guessing would
-# otherwise hit the network on every scan()/create_stack() call and could
-# silently inject an icon into asserted-exact file contents).
 NO_ICON = patch("stacks_service.icon_service.guess", return_value=None)
 
 
@@ -46,16 +42,13 @@ def test_scan_skips_unreadable_dir_instead_of_crashing() -> None:
         good.mkdir()
         (good / "docker-compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
 
-        # e.g. an unrelated directory under stacks_dir this process has no
-        # permission to even stat() into - same crash cap_drop: ALL exposed
-        # in production by stripping root's CAP_DAC_OVERRIDE.
         unreadable = stacks_dir / "unreadable"
         unreadable.mkdir(mode=0o000)
         try:
             svc = StackService(stacks_dir=stacks_dir)
             stacks = {s.name: s for s in svc.scan()}
         finally:
-            unreadable.chmod(0o700)  # let TemporaryDirectory clean up
+            unreadable.chmod(0o700)
 
         assert "unreadable" not in stacks
         assert stacks["example"].error is None
@@ -76,7 +69,6 @@ def test_scan_finds_all_compose_filenames_in_docker_compose_precedence_order() -
             stack_dir.mkdir()
             (stack_dir / filename).write_text("services:\n  web:\n    image: nginx:alpine\n")
 
-        # a stack with both compose.yaml and docker-compose.yaml should prefer compose.yaml
         precedence = stacks_dir / "prefers-compose-yaml"
         precedence.mkdir()
         (precedence / "compose.yaml").write_text("services:\n  new:\n    image: nginx:alpine\n")
@@ -103,10 +95,8 @@ def test_override_file_is_detected_and_ordered_right_after_the_primary_file() ->
         with_override.mkdir()
         (with_override / "compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
         (with_override / "compose.override.yaml").write_text("services:\n  web:\n    ports: ['8080:80']\n")
-        # a leftover legacy file - inert, but should still show up (last)
         (with_override / "docker-compose.yaml").write_text("services:\n  old:\n    image: nginx:alpine\n")
 
-        # docker-compose.* base pairs with docker-compose.override.*, not compose.override.*
         wrong_family = stacks_dir / "wrong-family"
         wrong_family.mkdir()
         (wrong_family / "docker-compose.yaml").write_text("services:\n  web:\n    image: nginx:alpine\n")
@@ -122,9 +112,6 @@ def test_override_file_is_detected_and_ordered_right_after_the_primary_file() ->
         assert stacks["with-override"].override_file == "compose.override.yaml"
         assert stacks["with-override"].compose_files == ["compose.yaml", "compose.override.yaml", "docker-compose.yaml"]
 
-        # the mismatched-family override file isn't recognized at all - not
-        # merged, not even shown as an editor tab (matching docker compose's
-        # own behavior, which wouldn't auto-include it either)
         assert stacks["wrong-family"].override_file is None
         assert stacks["wrong-family"].compose_files == ["docker-compose.yaml"]
 
@@ -149,8 +136,6 @@ def test_multiple_compose_files_are_each_independently_readable_and_writable() -
 
         svc.write_raw("multi", "services:\n  legacy:\n    image: nginx:latest\n", "docker-compose.yaml")
         assert svc.read_raw("multi", "docker-compose.yaml") == "services:\n  legacy:\n    image: nginx:latest\n"
-        # writing the non-primary file must not touch the primary one, or
-        # what docker compose/caddy actually read for this stack
         assert svc.read_raw("multi", "compose.yaml") == "services:\n  web:\n    image: nginx:alpine\n"
 
         try:
@@ -185,7 +170,6 @@ def test_create_write_and_delete_stack_round_trip() -> None:
             assert False, "expected invalid yaml to raise"
         except Exception:
             pass
-        # a rejected write must not clobber the file it failed to replace
         assert svc.read_raw("web") == "services:\n  app:\n    image: nginx:alpine\n"
 
         updated = svc.write_raw("web", "services:\n  app:\n    image: nginx:latest\n")
@@ -212,8 +196,35 @@ def test_update_metadata_patches_x_litethaus_and_preserves_comments() -> None:
         updated = svc.update_metadata("web", {"domain": "new.home.arpa", "icon": "nginx", "service": None})
         assert updated.x_litethaus == {"domain": "new.home.arpa", "port": 8080, "icon": "nginx"}
         assert (stack_dir / ".litethaus.yaml").read_text().startswith("# a comment worth keeping\n")
-        # metadata never touches the compose file itself
         assert svc.read_raw("web") == "services:\n  app:\n    image: nginx:alpine\n"
+
+
+def test_update_metadata_bulk_patches_every_stack_with_a_single_scan() -> None:
+    with tempfile.TemporaryDirectory() as tmp, NO_ICON:
+        stacks_dir = Path(tmp)
+        for name in ("a", "b", "c"):
+            stack_dir = stacks_dir / name
+            stack_dir.mkdir()
+            (stack_dir / "compose.yaml").write_text("services:\n  app:\n    image: nginx:alpine\n")
+
+        svc = StackService(stacks_dir=stacks_dir)
+        svc.scan()
+
+        with patch.object(svc, "scan", wraps=svc.scan) as scan_spy:
+            updated = svc.update_metadata_bulk(["a", "b", "c"], {"auto_update": True})
+            assert scan_spy.call_count == 1
+
+        assert {s.name: s.x_litethaus for s in updated} == {
+            "a": {"auto_update": True},
+            "b": {"auto_update": True},
+            "c": {"auto_update": True},
+        }
+
+        svc.update_metadata_bulk(["a", "b"], {"auto_update": None})
+        stacks = {s.name: s for s in svc.list_stacks()}
+        assert stacks["a"].x_litethaus == {}
+        assert stacks["b"].x_litethaus == {}
+        assert stacks["c"].x_litethaus == {"auto_update": True}
 
 
 def test_image_basename_strips_registry_tag_and_digest() -> None:
@@ -242,7 +253,6 @@ def test_create_stack_injects_guessed_icon_when_none_provided() -> None:
             created = svc.create_stack("media", original)
 
         assert created.x_litethaus == {"icon": "plex"}
-        # the guessed icon lands in the sidecar file, never in the compose file
         assert svc.read_raw("media") == original
         assert "icon: plex" in (Path(tmp) / "media" / ".litethaus.yaml").read_text()
 
@@ -256,8 +266,6 @@ def test_create_stack_migrates_embedded_x_litethaus_and_skips_guess_when_icon_pr
 
         guess.assert_not_called()
         assert created.x_litethaus == {"icon": "custom"}
-        # scan()'s migration path strips the embedded block from the compose
-        # file and moves it into the sidecar, same as any pre-existing stack
         assert "x-litethaus" not in svc.read_raw("web")
         assert svc.read_raw("web") == "services:\n  app:\n    image: nginx:alpine\n"
         assert "icon: custom" in (Path(tmp) / "web" / ".litethaus.yaml").read_text()
@@ -332,14 +340,10 @@ def test_scan_migrates_embedded_x_litethaus_to_sidecar_and_preserves_compose_com
 
 
 def test_watch_paths_covers_stacks_dir_and_each_stack_dir_only() -> None:
-    # Must stay bounded to stacks_dir plus its immediate stack subdirectories -
-    # never recurse into a stack's own data/media/db subfolders (that's what
-    # made watch_forever expensive when stacks_dir points at a host's whole
-    # compose root; see CLAUDE.md architecture note 1).
     with tempfile.TemporaryDirectory() as tmp:
         stacks_dir = Path(tmp)
         (stacks_dir / "plex").mkdir()
-        (stacks_dir / "plex" / "data").mkdir()  # nested - must NOT appear in watch paths
+        (stacks_dir / "plex" / "data").mkdir()
         (stacks_dir / "sonarr").mkdir()
         (stacks_dir / "not-a-dir.txt").write_text("")
 
@@ -352,7 +356,7 @@ def test_restart_watcher_signals_the_current_stop_event_when_armed() -> None:
     svc = StackService(stacks_dir=Path("/tmp"))
 
     assert svc._watch_stop_event is None
-    svc.restart_watcher()  # no watcher running yet: must be a safe no-op
+    svc.restart_watcher()
 
     stop_event = threading.Event()
     svc._watch_stop_event = stop_event
@@ -369,6 +373,7 @@ if __name__ == "__main__":
     test_multiple_compose_files_are_each_independently_readable_and_writable()
     test_create_write_and_delete_stack_round_trip()
     test_update_metadata_patches_x_litethaus_and_preserves_comments()
+    test_update_metadata_bulk_patches_every_stack_with_a_single_scan()
     test_image_basename_strips_registry_tag_and_digest()
     test_icon_candidates_orders_image_basenames_before_name_before_services()
     test_create_stack_injects_guessed_icon_when_none_provided()

@@ -26,6 +26,7 @@ export function CaddyCertificatesTab() {
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs uppercase text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
               <th className="px-3 py-2">Domain</th>
+              <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Issuer</th>
               <th className="px-3 py-2">Expires</th>
               <th className="px-3 py-2">Days left</th>
@@ -34,9 +35,11 @@ export function CaddyCertificatesTab() {
           <tbody>
             {certs?.map((cert, i) => {
               const days = daysUntil(cert.expires_at)
+              const isWildcard = cert.domains.some((d) => d.startsWith('*.'))
               return (
                 <tr key={`${cert.domains.join(',')}-${cert.expires_at}-${i}`} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-1.5 text-neutral-700 dark:text-neutral-200">{cert.domains.join(', ') || '—'}</td>
+                  <td className="px-3 py-1.5 text-neutral-500 dark:text-neutral-400">{isWildcard ? 'Wildcard' : 'Individual'}</td>
                   <td className="px-3 py-1.5 text-neutral-500 dark:text-neutral-400">{cert.issuer}</td>
                   <td className="px-3 py-1.5 text-neutral-500 dark:text-neutral-400">{new Date(cert.expires_at).toLocaleDateString()}</td>
                   <td className={`px-3 py-1.5 ${days < WARNING_DAYS ? 'text-red-600 dark:text-red-400' : 'text-neutral-500 dark:text-neutral-400'}`}>
@@ -47,7 +50,7 @@ export function CaddyCertificatesTab() {
             })}
             {certs?.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-2 text-neutral-400 dark:text-neutral-500">
+                <td colSpan={5} className="px-3 py-2 text-neutral-400 dark:text-neutral-500">
                   no certificates found
                 </td>
               </tr>

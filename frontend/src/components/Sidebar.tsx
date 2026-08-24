@@ -8,6 +8,7 @@ import {
   Home as HomeIcon,
   LogOut,
   Plus,
+  RefreshCw,
   Settings as SettingsIcon,
   Waypoints,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ interface SidebarProps {
   onOpenHome: () => void
   onOpenSettings: () => void
   onOpenCaddy: () => void
+  onOpenUpdates: () => void
   onNewStack: () => void
   onLogout: () => void
 }
@@ -45,6 +47,7 @@ export function Sidebar({
   onOpenHome,
   onOpenSettings,
   onOpenCaddy,
+  onOpenUpdates,
   onNewStack,
   onLogout,
 }: SidebarProps) {
@@ -186,6 +189,17 @@ export function Sidebar({
         >
           <Waypoints size={14} className="text-neutral-400 dark:text-neutral-500" />
           Caddy
+        </button>
+        <button
+          onClick={onOpenUpdates}
+          className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
+            route.view === 'updates'
+              ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+              : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+          }`}
+        >
+          <RefreshCw size={14} className="text-neutral-400 dark:text-neutral-500" />
+          Updates
         </button>
         <button
           onClick={onLogout}

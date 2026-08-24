@@ -4,7 +4,7 @@ import threading
 import time
 import urllib.request
 from collections import deque
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from cert_service import cert_service
 from config_service import config_service
@@ -15,10 +15,12 @@ from stacks_service import stack_service
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 15
-HEALTH_LOG_MAXLEN = 500  # ponytail: global ring buffer, split per-stack if one noisy stack starts crowding others out
+HEALTH_LOG_MAXLEN = 500
 CERT_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 CERT_EXPIRY_WARNING_DAYS = 14
 DDNS_CHECK_INTERVAL_SECONDS = 300
+UPDATE_CHECK_INTERVAL_SECONDS = 12 * 60 * 60
+AUTO_UPDATE_DEFAULT_TIME = "03:00"
 
 
 class HealthService:
@@ -30,6 +32,10 @@ class HealthService:
         self._alerted_certs: set[str] = set()
         self._last_ddns_check: float = float("-inf")
         self._ddns_failing: set[str] = set()
+        self._last_update_check: float = float("-inf")
+        self._update_available: dict[str, bool] = {}
+        self._update_notified: set[str] = set()
+        self._last_auto_update_date: date | None = None
 
     def check_once(self) -> None:
         cfg = config_service.load()
@@ -53,13 +59,11 @@ class HealthService:
                 self._notify(webhook_url, stack.name, health)
         self._check_certs_once(webhook_url)
         self._check_ddns_once(webhook_url)
+        self._check_updates_once(webhook_url)
+        self._run_auto_updates_once(webhook_url)
         self._ping_healthchecks(cfg.get("healthchecks_url") or "")
 
     def _ping_healthchecks(self, url: str) -> None:
-        # Dead-man's-switch ping (https://healthchecks.io): fired every poll
-        # tick just like the rest of check_once() - a missed ping is what
-        # tells healthchecks.io (not litethaus) that this process died, so
-        # it must not be gated behind any of check_once()'s own logic.
         if not url:
             return
         try:
@@ -80,9 +84,6 @@ class HealthService:
             logger.exception("Failed to send health webhook for %s", stack_name)
 
     def _check_certs_once(self, webhook_url: str) -> None:
-        # Cert expiry moves over days, not seconds - polling it on the same
-        # 15s cadence as container health would be pure waste, so this gates
-        # itself to once a day independent of watch_forever()'s loop period.
         now = time.monotonic()
         if now - self._last_cert_check < CERT_CHECK_INTERVAL_SECONDS:
             return
@@ -158,6 +159,101 @@ class HealthService:
             urllib.request.urlopen(req, timeout=5)
         except Exception:
             logger.exception("Failed to send DDNS-error webhook for %s", domain)
+
+    def _check_updates_once(self, webhook_url: str) -> None:
+        now = time.monotonic()
+        if now - self._last_update_check < UPDATE_CHECK_INTERVAL_SECONDS:
+            return
+        self._last_update_check = now
+        cfg = config_service.load()
+        if not cfg.get("update_check_enabled", True):
+            return
+        for stack in stack_service.list_stacks():
+            if stack.error or docker_service.container_status(stack) == "stopped":
+                continue
+            available = docker_service.compose_check_update(stack)
+            self._update_available[stack.name] = available
+            if available:
+                if stack.name not in self._update_notified and webhook_url:
+                    self._notify_update_available(webhook_url, stack.name)
+                self._update_notified.add(stack.name)
+            else:
+                self._update_notified.discard(stack.name)
+
+    def _notify_update_available(self, webhook_url: str, stack_name: str) -> None:
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps({"stack_update_available": stack_name}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            logger.exception("Failed to send update-available webhook for %s", stack_name)
+
+    def update_available(self, stack_name: str) -> bool:
+        return self._update_available.get(stack_name, False)
+
+    def clear_update_flag(self, stack_name: str) -> None:
+        self._update_available[stack_name] = False
+        self._update_notified.discard(stack_name)
+
+    def _run_auto_updates_once(self, webhook_url: str) -> None:
+        today = date.today()
+        if self._last_auto_update_date == today:
+            return
+        cfg = config_service.load()
+        if not cfg.get("update_check_enabled", True):
+            return
+        time_str = cfg.get("auto_update_time") or AUTO_UPDATE_DEFAULT_TIME
+        try:
+            target = datetime.strptime(time_str, "%H:%M").time()
+        except ValueError:
+            target = datetime.strptime(AUTO_UPDATE_DEFAULT_TIME, "%H:%M").time()
+        if datetime.now().time() < target:
+            return
+        self._last_auto_update_date = today
+        self._apply_auto_updates(webhook_url)
+
+    def run_auto_updates_now(self) -> list[dict[str, object]]:
+        cfg = config_service.load()
+        if not cfg.get("update_check_enabled", True):
+            return []
+        self._last_auto_update_date = date.today()
+        return self._apply_auto_updates(cfg.get("webhook_url") or "")
+
+    def _apply_auto_updates(self, webhook_url: str) -> list[dict[str, object]]:
+        results: list[dict[str, object]] = []
+        for stack in stack_service.list_stacks():
+            if stack.error or not stack.x_litethaus.get("auto_update"):
+                continue
+            if docker_service.container_status(stack) != "running":
+                continue
+            if not docker_service.compose_check_update(stack):
+                continue
+            ok, output = docker_service.compose_update(stack)
+            if ok:
+                self.clear_update_flag(stack.name)
+            if webhook_url:
+                self._notify_auto_update(webhook_url, stack.name, ok, output)
+            results.append({"stack": stack.name, "ok": ok})
+        return results
+
+    def _notify_auto_update(self, webhook_url: str, stack_name: str, ok: bool, output: str) -> None:
+        payload: dict[str, object] = {"stack_auto_updated": stack_name, "ok": ok}
+        if not ok:
+            payload["detail"] = output[-500:]
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            logger.exception("Failed to send auto-update webhook for %s", stack_name)
 
     def health_log(self, stack_name: str) -> list[dict[str, str]]:
         return [e for e in self._health_log if e["stack"] == stack_name]
