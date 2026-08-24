@@ -6,6 +6,7 @@ services:
     volumes:
       - ./backend:/app
       - ./config:/config
+      - /docker:/docker
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8080:8000"

@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, LayoutGrid, List, Loader2, Menu, PackageOpen, Search } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  LayoutGrid,
+  List,
+  Loader2,
+  Menu,
+  PackageOpen,
+  Search,
+  X,
+} from "lucide-react";
 import {
   authLogout,
   createStack,
@@ -16,20 +25,20 @@ import {
   type Stack,
   type StackState,
   type StackStatus,
-} from './api'
-import { AuthScreen } from './components/AuthScreen'
-import { CaddyPage } from './components/CaddyPage'
-import { HomePage } from './components/HomePage'
-import { StackCard } from './components/StackCard'
-import { StackDetail } from './components/StackDetail'
-import { StackEditor } from './components/StackEditor'
-import { SettingsPage } from './components/SettingsPage'
-import { Sidebar } from './components/Sidebar'
-import { UpdatesPage } from './components/UpdatesPage'
-import { parseRoute, routePath, type Route } from './routing'
-import { setThemePreference } from './theme'
+} from "./api";
+import { AuthScreen } from "./components/AuthScreen";
+import { CaddyPage } from "./components/CaddyPage";
+import { HomePage } from "./components/HomePage";
+import { StackCard } from "./components/StackCard";
+import { StackDetail } from "./components/StackDetail";
+import { StackEditor } from "./components/StackEditor";
+import { SettingsPage } from "./components/SettingsPage";
+import { Sidebar } from "./components/Sidebar";
+import { UpdatesPage } from "./components/UpdatesPage";
+import { parseRoute, routePath, type Route } from "./routing";
+import { setThemePreference } from "./theme";
 
-const STATUS_POLL_MS = 5000
+const STATUS_POLL_MS = 5000;
 
 const NEW_STACK_TEMPLATE = `services:
   app:
@@ -41,194 +50,216 @@ const NEW_STACK_TEMPLATE = `services:
 networks:
   litethaus:
     external: true
-`
+`;
 
 function useRoute(): [Route, (route: Route) => void] {
-  const [path, setPath] = useState(() => window.location.pathname)
+  const [path, setPath] = useState(() => window.location.pathname);
 
   useEffect(() => {
-    const onPopState = () => setPath(window.location.pathname)
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [])
+    const onPopState = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const navigate = useCallback((route: Route) => {
-    const next = routePath(route)
-    window.history.pushState({}, '', next)
-    setPath(next)
-  }, [])
+    const next = routePath(route);
+    window.history.pushState({}, "", next);
+    setPath(next);
+  }, []);
 
-  const route = useMemo(() => parseRoute(path), [path])
+  const route = useMemo(() => parseRoute(path), [path]);
 
-  return [route, navigate]
+  return [route, navigate];
 }
 
 function App() {
-  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null)
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
 
   const checkAuth = useCallback(() => {
     fetchAuthStatus()
       .then(setAuthStatus)
-      .catch(() => setAuthStatus({ configured: true, authenticated: false }))
-  }, [])
+      .catch(() => setAuthStatus({ configured: true, authenticated: false }));
+  }, []);
 
   useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+    checkAuth();
+  }, [checkAuth]);
 
   if (!authStatus) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-neutral-50 dark:bg-neutral-950">
         <Loader2 size={20} className="animate-spin text-neutral-400" />
       </div>
-    )
+    );
   }
 
   if (!authStatus.configured) {
-    return <AuthScreen mode="setup" onAuthenticated={checkAuth} />
+    return <AuthScreen mode="setup" onAuthenticated={checkAuth} />;
   }
 
   if (!authStatus.authenticated) {
-    return <AuthScreen mode="login" onAuthenticated={checkAuth} />
+    return <AuthScreen mode="login" onAuthenticated={checkAuth} />;
   }
 
-  return <Dashboard onLogout={checkAuth} />
+  return <Dashboard onLogout={checkAuth} />;
 }
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [stacks, setStacks] = useState<Stack[] | null>(null)
-  const [statuses, setStatuses] = useState<Record<string, StackState>>({})
-  const [health, setHealth] = useState<Record<string, StackStatus>>({})
-  const [busy, setBusy] = useState<Record<string, boolean>>({})
-  const [error, setError] = useState<string | null>(null)
-  const [route, navigate] = useRoute()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [httpsPort, setHttpsPort] = useState(443)
-  const [extraRoutesJson, setExtraRoutesJson] = useState('')
-  const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(
-    () => (localStorage.getItem('litethaus-view') as 'grid' | 'list' | null) ?? 'grid',
-  )
+  const [stacks, setStacks] = useState<Stack[] | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, StackState>>({});
+  const [health, setHealth] = useState<Record<string, StackStatus>>({});
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [route, navigate] = useRoute();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [httpsPort, setHttpsPort] = useState(443);
+  const [extraRoutesJson, setExtraRoutesJson] = useState("");
+  const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">(
+    () =>
+      (localStorage.getItem("litethaus-view") as "grid" | "list" | null) ??
+      "grid",
+  );
 
   useEffect(() => {
-    localStorage.setItem('litethaus-view', viewMode)
-  }, [viewMode])
+    localStorage.setItem("litethaus-view", viewMode);
+  }, [viewMode]);
 
   const refreshStatuses = useCallback(async (list: Stack[]) => {
     const entries = await Promise.all(
-      list.filter((s) => !s.error).map(async (s) => [s.name, await fetchStatus(s.name)] as const),
-    )
-    setStatuses(Object.fromEntries(entries.map(([name, info]) => [name, info.status])))
-    setHealth(Object.fromEntries(entries))
-  }, [])
+      list
+        .filter((s) => !s.error)
+        .map(async (s) => [s.name, await fetchStatus(s.name)] as const),
+    );
+    setStatuses(
+      Object.fromEntries(entries.map(([name, info]) => [name, info.status])),
+    );
+    setHealth(Object.fromEntries(entries));
+  }, []);
 
   const refreshStacks = useCallback(async () => {
-    const list = await fetchStacks()
-    await refreshStatuses(list)
-    setStacks(list)
-  }, [refreshStatuses])
+    const list = await fetchStacks();
+    await refreshStatuses(list);
+    setStacks(list);
+  }, [refreshStatuses]);
 
   async function handleCreate(name: string, content: string) {
-    await createStack(name, content)
-    await refreshStacks()
-    navigate({ view: 'stack', name })
+    await createStack(name, content);
+    await refreshStacks();
+    navigate({ view: "stack", name });
   }
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
     async function load() {
       try {
-        const list = await fetchStacks()
-        if (cancelled) return
-        await refreshStatuses(list)
-        if (cancelled) return
-        setStacks(list)
-        setError(null)
+        const list = await fetchStacks();
+        if (cancelled) return;
+        await refreshStatuses(list);
+        if (cancelled) return;
+        setStacks(list);
+        setError(null);
       } catch {
-        if (!cancelled) setError('backend unreachable')
+        if (!cancelled) setError("backend unreachable");
       }
 
       try {
-        const cfg = await fetchConfig()
-        if (cancelled) return
-        setThemePreference(String(cfg.theme ?? 'system'))
-        setHttpsPort(Number(cfg.https_port ?? 443))
-        setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? ''))
-      } catch {
-      }
+        const cfg = await fetchConfig();
+        if (cancelled) return;
+        setThemePreference(String(cfg.theme ?? "system"));
+        setHttpsPort(Number(cfg.https_port ?? 443));
+        setExtraRoutesJson(String(cfg.caddy_extra_routes_json ?? ""));
+      } catch {}
     }
 
-    load()
-    const interval = setInterval(load, STATUS_POLL_MS)
+    load();
+    const interval = setInterval(load, STATUS_POLL_MS);
     return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [refreshStatuses])
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [refreshStatuses]);
 
   useEffect(() => {
-    if (stacks && route.view === 'stack' && !stacks.some((s) => s.name === route.name)) {
-      navigate({ view: 'stacks' })
+    if (
+      stacks &&
+      route.view === "stack" &&
+      !stacks.some((s) => s.name === route.name)
+    ) {
+      navigate({ view: "stacks" });
     }
-  }, [stacks, route, navigate])
+  }, [stacks, route, navigate]);
 
   useEffect(() => {
-    setSidebarOpen(false)
-  }, [route])
+    setSidebarOpen(false);
+  }, [route]);
 
-  async function runAction(stack: Stack, action: (name: string) => Promise<unknown>) {
-    setBusy((prev) => ({ ...prev, [stack.name]: true }))
+  async function runAction(
+    stack: Stack,
+    action: (name: string) => Promise<unknown>,
+  ) {
+    setBusy((prev) => ({ ...prev, [stack.name]: true }));
     try {
-      await action(stack.name)
-      const info = await fetchStatus(stack.name)
-      setStatuses((prev) => ({ ...prev, [stack.name]: info.status }))
-      setHealth((prev) => ({ ...prev, [stack.name]: info }))
+      await action(stack.name);
+      const info = await fetchStatus(stack.name);
+      setStatuses((prev) => ({ ...prev, [stack.name]: info.status }));
+      setHealth((prev) => ({ ...prev, [stack.name]: info }));
     } finally {
-      setBusy((prev) => ({ ...prev, [stack.name]: false }))
+      setBusy((prev) => ({ ...prev, [stack.name]: false }));
     }
   }
 
   function handleToggle(stack: Stack) {
-    const isUp = statuses[stack.name] !== 'stopped'
-    return runAction(stack, isUp ? stackDown : stackUp)
+    const isUp = statuses[stack.name] !== "stopped";
+    return runAction(stack, isUp ? stackDown : stackUp);
   }
 
   function handleRestart(stack: Stack) {
-    return runAction(stack, stackRestart)
+    return runAction(stack, stackRestart);
   }
 
   function handleUpdate(stack: Stack) {
-    return runAction(stack, stackUpdate)
+    return runAction(stack, stackUpdate);
   }
 
   async function handleToggleFavorite(stack: Stack) {
-    await updateStackMetadata(stack.name, { favorite: stack.x_litethaus.favorite ? null : true })
-    await refreshStacks()
+    await updateStackMetadata(stack.name, {
+      favorite: stack.x_litethaus.favorite ? null : true,
+    });
+    await refreshStacks();
   }
 
   const visibleStacks = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    const filtered = query ? (stacks ?? []).filter((s) => s.name.toLowerCase().includes(query)) : (stacks ?? [])
-    return [...filtered].sort((a, b) => Number(!!b.x_litethaus.favorite) - Number(!!a.x_litethaus.favorite))
-  }, [stacks, search])
+    const query = search.trim().toLowerCase();
+    const filtered = query
+      ? (stacks ?? []).filter((s) => s.name.toLowerCase().includes(query))
+      : (stacks ?? []);
+    return [...filtered].sort(
+      (a, b) =>
+        Number(!!b.x_litethaus.favorite) - Number(!!a.x_litethaus.favorite),
+    );
+  }, [stacks, search]);
 
-  const selectedStack = route.view === 'stack' ? (stacks?.find((s) => s.name === route.name) ?? null) : null
+  const selectedStack =
+    route.view === "stack"
+      ? (stacks?.find((s) => s.name === route.name) ?? null)
+      : null;
 
-  const listView = route.view === 'stacks' || route.view === 'stack'
+  const listView = route.view === "stacks" || route.view === "stack";
 
   const heading =
-    route.view === 'home'
-      ? 'Home'
-      : route.view === 'settings'
-        ? 'Settings'
-        : route.view === 'caddy'
-          ? 'Caddy'
-          : route.view === 'updates'
-            ? 'Updates'
-            : route.view === 'new'
-              ? 'New Stack'
-              : `Stacks${route.view === 'stack' ? ` / ${route.name}` : ''}`
+    route.view === "home"
+      ? "Home"
+      : route.view === "settings"
+        ? "Settings"
+        : route.view === "caddy"
+          ? "Caddy"
+          : route.view === "updates"
+            ? "Updates"
+            : route.view === "new"
+              ? "New Stack"
+              : `Stacks${route.view === "stack" ? ` / ${route.name}` : ""}`;
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -247,12 +278,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         loading={stacks === null}
         route={route}
         open={sidebarOpen}
-        onSelectStack={(name) => navigate(name ? { view: 'stack', name } : { view: 'stacks' })}
-        onOpenHome={() => navigate({ view: 'home' })}
-        onOpenSettings={() => navigate({ view: 'settings' })}
-        onOpenCaddy={() => navigate({ view: 'caddy' })}
-        onOpenUpdates={() => navigate({ view: 'updates' })}
-        onNewStack={() => navigate({ view: 'new' })}
+        onSelectStack={(name) =>
+          navigate(name ? { view: "stack", name } : { view: "stacks" })
+        }
+        onOpenHome={() => navigate({ view: "home" })}
+        onOpenSettings={() => navigate({ view: "settings" })}
+        onOpenCaddy={() => navigate({ view: "caddy" })}
+        onOpenUpdates={() => navigate({ view: "updates" })}
+        onNewStack={() => navigate({ view: "new" })}
         onLogout={() => authLogout().then(onLogout)}
       />
 
@@ -265,9 +298,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           >
             <Menu size={20} />
           </button>
-          <h1 className="text-sm text-neutral-500 dark:text-neutral-400">{heading}</h1>
+          <h1 className="text-sm text-neutral-500 dark:text-neutral-400">
+            {heading}
+          </h1>
 
-          {route.view === 'stacks' && (
+          {route.view === "stacks" && (
             <div className="ml-auto flex items-center gap-2">
               <div className="flex items-center gap-2 rounded border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
                 <Search size={14} className="shrink-0 text-neutral-400" />
@@ -277,19 +312,28 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   placeholder="Search stacks…"
                   className="w-32 bg-transparent text-sm outline-none sm:w-48 dark:text-neutral-100"
                 />
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="shrink-0 rounded p-0.5 text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-1 rounded border border-neutral-300 p-0.5 dark:border-neutral-700">
                 <button
-                  onClick={() => setViewMode('grid')}
+                  onClick={() => setViewMode("grid")}
                   aria-label="Grid view"
-                  className={`rounded p-1 ${viewMode === 'grid' ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100' : 'text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300'}`}
+                  className={`rounded p-1 ${viewMode === "grid" ? "bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100" : "text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"}`}
                 >
                   <LayoutGrid size={14} />
                 </button>
                 <button
-                  onClick={() => setViewMode('list')}
+                  onClick={() => setViewMode("list")}
                   aria-label="List view"
-                  className={`rounded p-1 ${viewMode === 'list' ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100' : 'text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300'}`}
+                  className={`rounded p-1 ${viewMode === "list" ? "bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100" : "text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"}`}
                 >
                   <List size={14} />
                 </button>
@@ -299,38 +343,51 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
-          {route.view === 'home' && error && (
+          {route.view === "home" && error && (
             <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
               <AlertTriangle size={16} />
               {error}
             </div>
           )}
 
-          {route.view === 'home' && !error &&
+          {route.view === "home" &&
+            !error &&
             (stacks === null ? (
               <div className="flex items-center gap-2 text-sm text-neutral-400 dark:text-neutral-500">
                 <Loader2 size={16} className="animate-spin" />
                 Loading…
               </div>
             ) : (
-              <HomePage stacks={stacks} statuses={statuses} extraRoutesJson={extraRoutesJson} httpsPort={httpsPort} />
+              <HomePage
+                stacks={stacks}
+                statuses={statuses}
+                extraRoutesJson={extraRoutesJson}
+                httpsPort={httpsPort}
+              />
             ))}
 
-          {route.view === 'settings' && <SettingsPage />}
+          {route.view === "settings" && <SettingsPage />}
 
-          {route.view === 'caddy' && <CaddyPage stacks={stacks ?? []} onStacksChanged={refreshStacks} />}
-
-          {route.view === 'updates' && (
-            <UpdatesPage stacks={stacks ?? []} statuses={statuses} health={health} onStacksChanged={refreshStacks} />
+          {route.view === "caddy" && (
+            <CaddyPage stacks={stacks ?? []} onStacksChanged={refreshStacks} />
           )}
 
-          {route.view === 'new' && (
+          {route.view === "updates" && (
+            <UpdatesPage
+              stacks={stacks ?? []}
+              statuses={statuses}
+              health={health}
+              onStacksChanged={refreshStacks}
+            />
+          )}
+
+          {route.view === "new" && (
             <StackEditor
               title="New Stack"
               nameEditable
               initialContent={NEW_STACK_TEMPLATE}
               onSave={handleCreate}
-              onCancel={() => navigate({ view: 'stacks' })}
+              onCancel={() => navigate({ view: "stacks" })}
             />
           )}
 
@@ -351,18 +408,23 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           {listView && stacks !== null && stacks.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-16 text-center text-neutral-400 dark:text-neutral-500">
               <PackageOpen size={28} />
-              <p className="text-sm">No stacks found. Add one under stacks_dir.</p>
+              <p className="text-sm">
+                No stacks found. Add one under stacks_dir.
+              </p>
             </div>
           )}
 
-          {route.view === 'stacks' && stacks !== null && stacks.length > 0 && visibleStacks.length === 0 && (
-            <div className="flex flex-col items-center gap-2 py-16 text-center text-neutral-400 dark:text-neutral-500">
-              <Search size={28} />
-              <p className="text-sm">No stacks match your search.</p>
-            </div>
-          )}
+          {route.view === "stacks" &&
+            stacks !== null &&
+            stacks.length > 0 &&
+            visibleStacks.length === 0 && (
+              <div className="flex flex-col items-center gap-2 py-16 text-center text-neutral-400 dark:text-neutral-500">
+                <Search size={28} />
+                <p className="text-sm">No stacks match your search.</p>
+              </div>
+            )}
 
-          {route.view === 'stack' && stacks !== null && selectedStack && (
+          {route.view === "stack" && stacks !== null && selectedStack && (
             <StackDetail
               stack={selectedStack}
               httpsPort={httpsPort}
@@ -374,43 +436,49 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               onUpdate={() => handleUpdate(selectedStack)}
               onSaved={refreshStacks}
               onDeleted={() => {
-                navigate({ view: 'stacks' })
-                refreshStacks()
+                navigate({ view: "stacks" });
+                refreshStacks();
               }}
             />
           )}
 
-          {route.view === 'stacks' && stacks !== null && visibleStacks.length > 0 && (
-            <div
-              className={
-                viewMode === 'grid' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3' : 'flex flex-col gap-2'
-              }
-            >
-              {visibleStacks.map((stack) => (
-                <StackCard
-                  key={stack.name}
-                  stack={stack}
-                  httpsPort={httpsPort}
-                  status={statuses[stack.name] ?? null}
-                  health={health[stack.name]?.health ?? null}
-                  updateAvailable={health[stack.name]?.update_available ?? false}
-                  busy={!!busy[stack.name]}
-                  layout={viewMode}
-                  favorite={!!stack.x_litethaus.favorite}
-                  onToggle={() => handleToggle(stack)}
-                  onRestart={() => handleRestart(stack)}
-                  onUpdate={() => handleUpdate(stack)}
-                  onOpen={() => navigate({ view: 'stack', name: stack.name })}
-                  onToggleFavorite={() => handleToggleFavorite(stack)}
-                  onDeleted={refreshStacks}
-                />
-              ))}
-            </div>
-          )}
+          {route.view === "stacks" &&
+            stacks !== null &&
+            visibleStacks.length > 0 && (
+              <div
+                className={
+                  viewMode === "grid"
+                    ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                    : "flex flex-col gap-2"
+                }
+              >
+                {visibleStacks.map((stack) => (
+                  <StackCard
+                    key={stack.name}
+                    stack={stack}
+                    httpsPort={httpsPort}
+                    status={statuses[stack.name] ?? null}
+                    health={health[stack.name]?.health ?? null}
+                    updateAvailable={
+                      health[stack.name]?.update_available ?? false
+                    }
+                    busy={!!busy[stack.name]}
+                    layout={viewMode}
+                    favorite={!!stack.x_litethaus.favorite}
+                    onToggle={() => handleToggle(stack)}
+                    onRestart={() => handleRestart(stack)}
+                    onUpdate={() => handleUpdate(stack)}
+                    onOpen={() => navigate({ view: "stack", name: stack.name })}
+                    onToggleFavorite={() => handleToggleFavorite(stack)}
+                    onDeleted={refreshStacks}
+                  />
+                ))}
+              </div>
+            )}
         </main>
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
