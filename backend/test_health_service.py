@@ -356,7 +356,9 @@ def test_check_once_logs_health_transitions_only() -> None:
     with patch("health_service.stack_service.list_stacks", return_value=[stack]), \
          patch("health_service.config_service.load", return_value={}), \
          patch("health_service.docker_service.container_details", return_value=[]), \
+         patch("health_service.docker_service.host_container_stats", return_value=[]), \
          patch("health_service.docker_service.container_status", return_value="stopped"), \
+         patch("health_service.caddy_service.sync"), \
          patch("health_service.docker_service.summarize_health", side_effect=["healthy", "healthy", "unhealthy"]):
         svc.check_once()
         svc.check_once()
@@ -364,6 +366,24 @@ def test_check_once_logs_health_transitions_only() -> None:
     log = svc.health_log("app")
     assert [e["health"] for e in log] == ["healthy", "unhealthy"]
     assert svc.health_log("other-stack") == []
+
+
+def test_check_caddy_sync_respects_time_gate() -> None:
+    svc = _svc()
+    with patch("health_service.config_service.load", return_value={"caddy_enabled": True}), \
+         patch("health_service.caddy_service.sync") as sync:
+        svc._check_caddy_sync_once()
+        assert sync.call_count == 1
+        svc._check_caddy_sync_once()
+        assert sync.call_count == 1
+
+
+def test_check_caddy_sync_skips_when_disabled() -> None:
+    svc = _svc()
+    with patch("health_service.config_service.load", return_value={"caddy_enabled": False}), \
+         patch("health_service.caddy_service.sync") as sync:
+        svc._check_caddy_sync_once()
+        assert sync.call_count == 0
 
 
 if __name__ == "__main__":

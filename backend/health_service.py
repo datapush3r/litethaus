@@ -7,6 +7,7 @@ from collections import deque
 from datetime import date, datetime, timezone
 from typing import Any
 
+from caddy_service import caddy_service
 from cert_service import cert_service
 from config_service import config_service
 from ddns_service import ddns_service
@@ -20,6 +21,7 @@ HEALTH_LOG_MAXLEN = 500
 CERT_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 CERT_EXPIRY_WARNING_DAYS = 14
 DDNS_CHECK_INTERVAL_SECONDS = 300
+CADDY_RESYNC_INTERVAL_SECONDS = 60
 UPDATE_CHECK_INTERVAL_SECONDS = 12 * 60 * 60
 AUTO_UPDATE_DEFAULT_TIME = "03:00"
 
@@ -38,6 +40,7 @@ class HealthService:
         self._update_notified: set[str] = set()
         self._last_auto_update_date: date | None = None
         self._container_stats: list[dict[str, Any]] = []
+        self._last_caddy_resync: float = float("-inf")
 
     def check_once(self) -> None:
         cfg = config_service.load()
@@ -69,6 +72,20 @@ class HealthService:
         self._check_updates_once(webhook_url)
         self._run_auto_updates_once(webhook_url)
         self._ping_healthchecks(cfg.get("healthchecks_url") or "")
+        self._check_caddy_sync_once()
+
+    def _check_caddy_sync_once(self) -> None:
+        # Caddy holds its entire route config in the admin API only (the
+        # Caddyfile is an admin-socket stub), so any caddy restart wipes all
+        # routes until someone re-syncs. Re-push every 60s; sync() is a no-op
+        # POST when caddy is unreachable, and cheap when it isn't.
+        now = time.monotonic()
+        if now - self._last_caddy_resync < CADDY_RESYNC_INTERVAL_SECONDS:
+            return
+        self._last_caddy_resync = now
+        if not config_service.load().get("caddy_enabled", True):
+            return
+        caddy_service.sync(stack_service.list_stacks())
 
     def _ping_healthchecks(self, url: str) -> None:
         if not url:
