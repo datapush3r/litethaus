@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
-  Home as HomeIcon,
   LogOut,
   Plus,
   RefreshCw,
@@ -66,23 +65,16 @@ export function Sidebar({
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="mb-4 px-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-        LITETHAUS
-      </div>
-
       <button
         onClick={onOpenHome}
-        className={`mb-1 flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm ${
+        aria-label="Home"
+        className={`mb-4 w-full rounded px-2 py-1 text-left text-sm font-semibold ${
           route.view === "home"
-            ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
-            : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+            : "text-neutral-900 hover:bg-neutral-100 dark:text-neutral-100 dark:hover:bg-neutral-900"
         }`}
       >
-        <HomeIcon
-          size={14}
-          className="text-neutral-400 dark:text-neutral-500"
-        />
-        Home
+        LITETHAUS
       </button>
 
       <div className="flex items-center gap-1 rounded px-1 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-900">
