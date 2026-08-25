@@ -1,4 +1,5 @@
 import datetime as _dt
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
@@ -369,13 +370,22 @@ def test_check_once_logs_health_transitions_only() -> None:
 
 
 def test_check_caddy_sync_respects_time_gate() -> None:
-    svc = _svc()
-    with patch("health_service.config_service.load", return_value={"caddy_enabled": True}), \
-         patch("health_service.caddy_service.sync") as sync:
-        svc._check_caddy_sync_once()
-        assert sync.call_count == 1
-        svc._check_caddy_sync_once()
-        assert sync.call_count == 1
+    from pathlib import Path
+
+    from stacks_service import stack_service
+
+    original = stack_service._stacks_dir_override
+    stack_service._stacks_dir_override = Path(tempfile.mkdtemp())
+    try:
+        svc = _svc()
+        with patch("health_service.config_service.load", return_value={"caddy_enabled": True}), \
+             patch("health_service.caddy_service.sync") as sync:
+            svc._check_caddy_sync_once()
+            assert sync.call_count == 1
+            svc._check_caddy_sync_once()
+            assert sync.call_count == 1
+    finally:
+        stack_service._stacks_dir_override = original
 
 
 def test_check_caddy_sync_skips_when_disabled() -> None:

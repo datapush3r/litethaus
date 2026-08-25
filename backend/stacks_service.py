@@ -79,7 +79,8 @@ class StackService:
     def stacks_dir(self) -> Path:
         if self._stacks_dir_override is not None:
             return self._stacks_dir_override
-        return Path(config_service.load()["stacks_dir"])
+        # ponytail: fall back to the default instead of crashing when config lacks the key.
+        return Path(config_service.load().get("stacks_dir", "/config/stacks"))
 
     def scan(self) -> list[Stack]:
         stacks_dir = self.stacks_dir
@@ -106,8 +107,12 @@ class StackService:
         return list(stacks.values())
 
     def _guess_icon(self, name: str, data: dict[str, Any]) -> str | None:
-        if not config_service.load().get("auto_icon_enabled", True):
-            return None
+        # ponytail: swallow config errors instead of failing the whole scan; icon guessing is cosmetic.
+        try:
+            if not config_service.load().get("auto_icon_enabled", True):
+                return None
+        except Exception:
+            logger.warning("Config unreadable during icon guess; assuming enabled", exc_info=True)
         return icon_service.guess(_icon_candidates(name, data))
 
     def _read_metadata_node(self, meta_path: Path) -> Any:

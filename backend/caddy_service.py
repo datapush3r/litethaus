@@ -31,10 +31,18 @@ class CaddyService:
     def admin_url(self) -> str:
         if self._admin_url_override is not None:
             return self._admin_url_override
-        return config_service.load()["caddy_admin_url"]
+        # ponytail: fall back to the default instead of crashing when config lacks the key.
+        # ponytail: mirror the DEFAULT_CONFIG value in config_service.py (no import cycle).
+        return config_service.load().get("caddy_admin_url", "http://localhost:2019")
 
     def status(self) -> dict[str, Any]:
-        return {"enabled": config_service.load().get("caddy_enabled", True), **(self._last_sync or {})}
+        # ponytail: swallow config errors; caddy is optional and status must never 500.
+        try:
+            enabled = config_service.load().get("caddy_enabled", True)
+        except Exception:
+            logger.warning("Config unreadable in caddy status", exc_info=True)
+            enabled = True
+        return {"enabled": enabled, **(self._last_sync or {})}
 
     def fetch_live_config(self) -> dict[str, Any]:
         with urllib.request.urlopen(f"{self.admin_url}/config/", timeout=5) as resp:
@@ -153,7 +161,13 @@ class CaddyService:
         return config
 
     def sync(self, stacks: list[Stack]) -> None:
-        cfg = config_service.load()
+        try:
+            cfg = config_service.load()
+        except Exception as exc:
+            # ponytail: caddy is optional; a broken config file must not 500 the health loop.
+            logger.warning("Config unreadable in caddy sync", exc_info=True)
+            self._last_sync = {"ok": False, "at": datetime.now(timezone.utc).isoformat(), "error": str(exc)}
+            return
         if not cfg.get("caddy_enabled", True):
             return
         config = self.build_config(

@@ -83,9 +83,16 @@ class HealthService:
         if now - self._last_caddy_resync < CADDY_RESYNC_INTERVAL_SECONDS:
             return
         self._last_caddy_resync = now
-        if not config_service.load().get("caddy_enabled", True):
-            return
-        caddy_service.sync(stack_service.list_stacks())
+        try:
+            if not config_service.load().get("caddy_enabled", True):
+                return
+        except Exception:
+            logger.warning("Config unreadable in caddy resync; assuming enabled", exc_info=True)
+        # ponytail: sync is best-effort; a broken stacks dir must not kill the health loop.
+        try:
+            caddy_service.sync(stack_service.list_stacks())
+        except Exception:
+            logger.exception("Failed to re-sync Caddy routes")
 
     def _ping_healthchecks(self, url: str) -> None:
         if not url:
