@@ -396,10 +396,17 @@ async def stack_logs(websocket: WebSocket, name: str, container: str | None = No
 
     await websocket.accept()
 
+    seen_errors: set[str] = set()
+
     async def forward_logs() -> None:
         while True:
             async with aclosing(docker_service.stream_logs(stack, container)) as lines:
                 async for line in lines:
+                    # ponytail: dedupe by exact line text; compose errors repeat verbatim.
+                    if "Error" in line and line in seen_errors:
+                        continue
+                    if "Error" in line:
+                        seen_errors.add(line)
                     await websocket.send_text(line)
             await asyncio.sleep(1)
 
