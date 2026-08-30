@@ -93,7 +93,7 @@ export function Sidebar({
             className={`flex-1 rounded px-2 py-1 text-left text-sm font-semibold ${
               route.view === "home"
                 ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
-                : "text-neutral-900 hover:bg-neutral-100 dark:text-neutral-100 dark:hover:bg-neutral-900"
+                : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
             }`}
           >
             LITETHAUS
