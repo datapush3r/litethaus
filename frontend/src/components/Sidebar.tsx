@@ -67,7 +67,7 @@ export function Sidebar({
 
   return (
     <nav
-      className={`fixed inset-y-0 left-0 z-40 flex h-screen shrink-0 flex-col border-r bg-white transition-all sm:static sm:translate-x-0 dark:bg-neutral-950 ${
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen shrink-0 flex-col border-r border-neutral-200 bg-white transition-all sm:static sm:translate-x-0 dark:border-neutral-800 dark:bg-neutral-950 ${
         collapsed ? "w-12 p-2" : "w-60 p-3"
       } ${open ? "translate-x-0" : "-translate-x-full"}`}
       aria-hidden={collapsed || undefined}
