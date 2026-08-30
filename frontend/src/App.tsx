@@ -113,6 +113,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [route, navigate] = useRoute();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("litethaus-sidebar") === "collapsed",
+  );
+
+  useEffect(() => {
+    localStorage.setItem(
+      "litethaus-sidebar",
+      sidebarCollapsed ? "collapsed" : "open",
+    );
+  }, [sidebarCollapsed]);
   const [httpsPort, setHttpsPort] = useState(443);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">(
@@ -279,6 +289,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         loading={stacks === null}
         route={route}
         open={sidebarOpen}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
         onSelectStack={(name) =>
           navigate(name ? { view: "stack", name } : { view: "stacks" })
         }
