@@ -40,6 +40,8 @@ class HealthService:
         self._update_notified: set[str] = set()
         self._last_auto_update_date: date | None = None
         self._container_stats: list[dict[str, Any]] = []
+        self._host_mem_percent: float | None = None
+        self._host_cpu_percent: float | None = None
         self._last_caddy_resync: float = float("-inf")
 
     def check_once(self) -> None:
@@ -50,6 +52,26 @@ class HealthService:
         self._container_stats = docker_service.host_container_stats(
             [s for s in stack_service.list_stacks() if not s.error]
         )
+        # Sum of per-container memory as a share of host RAM. docker stats
+        # reports each container's MemPerc as % of the whole host, so the sum
+        # of mem_bytes / (host total recovered from any row) gives the aggregate.
+        rows = self._container_stats
+        host_total = next(
+            ((r["mem_bytes"] or 0) / (r["mem_percent"] / 100.0)
+             for r in rows if r["mem_bytes"] and r["mem_percent"]),
+            None,
+        )
+        used = sum(r["mem_bytes"] or 0 for r in rows)
+        self._host_mem_percent = (
+            round(used / host_total * 100, 1) if host_total else None
+        )
+        # Sum of per-container CPU as a share of all host cores. docker stats
+        # reports each container's CPUPerc against one core, so the sum is in
+        # "core-equivalents" and dividing by the core count gives host %.
+        import os as _os
+        cores = _os.cpu_count() or 1
+        cpu_sum = sum(r["cpu_percent"] or 0 for r in rows)
+        self._host_cpu_percent = round(cpu_sum / cores, 1)
         for stack in stack_service.list_stacks():
             if stack.error:
                 continue
@@ -294,6 +316,14 @@ class HealthService:
         if stack_name is not None:
             return [r for r in self._container_stats if r.get("stack") == stack_name]
         return self._container_stats
+
+    def host_mem_percent(self) -> float | None:
+        """Latest cached sum of container memory as % of host RAM (None if unknown)."""
+        return self._host_mem_percent
+
+    def host_cpu_percent(self) -> float | None:
+        """Latest cached sum of container CPU as % of all host cores."""
+        return self._host_cpu_percent
 
     def watch_forever(self) -> None:
         stop_event = threading.Event()

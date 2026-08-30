@@ -49,7 +49,27 @@ export interface ContainerStats {
   name: string;
   cpu_percent: number | null;
   mem_bytes: number | null;
-  gpu_percent: number | null;
+  mem_percent: number | null;
+}
+
+export interface HostMemInfo {
+  total_bytes: number;
+  container_percent: number | null;
+}
+
+export async function fetchHostMem(): Promise<HostMemInfo> {
+  const res = await fetch("/api/host/mem");
+  return (await res.json()) as HostMemInfo;
+}
+
+export interface HostCpuInfo {
+  cores: number;
+  container_percent: number | null;
+}
+
+export async function fetchHostCpu(): Promise<HostCpuInfo> {
+  const res = await fetch("/api/host/cpu");
+  return (await res.json()) as HostCpuInfo;
 }
 
 export interface StackStatus {

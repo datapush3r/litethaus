@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import re
 import threading
 from contextlib import aclosing, asynccontextmanager, suppress
@@ -91,6 +92,26 @@ def _set_session_cookie(request: Request, response: Response) -> None:
 @api.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@api.get("/host/mem")
+def host_mem() -> dict[str, Any]:
+    """Host RAM usage: total bytes and the % used by all running containers."""
+    page_size = os.sysconf("SC_PAGE_SIZE")
+    phys_pages = os.sysconf("SC_PHYS_PAGES")
+    return {
+        "total_bytes": int(page_size * phys_pages),
+        "container_percent": health_service.host_mem_percent(),
+    }
+
+
+@api.get("/host/cpu")
+def host_cpu() -> dict[str, Any]:
+    """Host CPU usage: core count and the % of all cores used by containers."""
+    return {
+        "cores": os.cpu_count() or 1,
+        "container_percent": health_service.host_cpu_percent(),
+    }
 
 
 @api.get("/auth/status")

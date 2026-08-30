@@ -1,7 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, PackageOpen } from "lucide-react";
 import {
+  fetchHostCpu,
+  fetchHostMem,
   sortStacksByStatus,
+  type HostCpuInfo,
+  type HostMemInfo,
   type Stack,
   type StackState,
   type StackStatus,
@@ -16,14 +20,15 @@ interface HomePageProps {
   onOpenStack: (name: string) => void;
 }
 
-type SortKey = "stack" | "container" | "cpu" | "mem" | "gpu";
+const HOST_MEM_POLL_MS = 5000;
+
+type SortKey = "stack" | "container" | "cpu" | "mem";
 
 interface ContainerRow {
   stack: string;
   container: string;
   cpu: number | null;
   mem: number | null;
-  gpu: number | null;
 }
 
 function fmtBytes(bytes: number | null): string {
@@ -44,6 +49,31 @@ export function HomePage({
   health,
   onOpenStack,
 }: HomePageProps) {
+  const [hostMem, setHostMem] = useState<HostMemInfo | null>(null);
+  const [hostCpu, setHostCpu] = useState<HostCpuInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      fetchHostMem()
+        .then((m) => {
+          if (!cancelled) setHostMem(m);
+        })
+        .catch(() => {});
+      fetchHostCpu()
+        .then((c) => {
+          if (!cancelled) setHostCpu(c);
+        })
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, HOST_MEM_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   const ok = stacks.filter((s) => !s.error && statuses[s.name] !== "stopped");
   const problems = ok.filter((s) =>
     BAD_HEALTH.has(health[s.name]?.health ?? "unknown"),
@@ -63,7 +93,6 @@ export function HomePage({
           container: s.name,
           cpu: s.cpu_percent,
           mem: s.mem_bytes,
-          gpu: s.gpu_percent,
         });
       }
     }
@@ -147,6 +176,18 @@ export function HomePage({
         </StackSection>
       )}
 
+      {(hostCpu || hostMem) && (
+        <section>
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            Host usage
+          </h2>
+          <div className="flex flex-col gap-3">
+            {hostCpu && <HostUsageCard hostCpu={hostCpu} />}
+            {hostMem && <HostUsageCard hostMem={hostMem} />}
+          </div>
+        </section>
+      )}
+
       <section>
         <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Container usage
@@ -186,20 +227,13 @@ export function HomePage({
                     asc={asc}
                     onClick={() => toggleSort("mem")}
                   />
-                  <Th
-                    label="GPU"
-                    align="right"
-                    active={sortKey === "gpu"}
-                    asc={asc}
-                    onClick={() => toggleSort("gpu")}
-                  />
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map((r) => (
                   <tr
                     key={`${r.stack}:${r.container}`}
-                    className="border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 dark:border-neutral-800/60 dark:hover:bg-neutral-800/40"
+                    className="border-b border-neutral-100 hover:bg-neutral-50 dark:border-neutral-800/60 dark:hover:bg-neutral-800/40"
                   >
                     <td className="px-3 py-2">
                       <button
@@ -218,12 +252,27 @@ export function HomePage({
                     <td className="px-3 py-2 text-right tabular-nums">
                       {fmtBytes(r.mem)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {r.gpu === null ? "–" : `${r.gpu.toFixed(0)}%`}
-                    </td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="border-t border-neutral-200 font-medium dark:border-neutral-700">
+                  <td className="px-3 py-2" colSpan={2}>
+                    Total
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {(() => {
+                      const cpus = sortedRows.filter((r) => r.cpu !== null);
+                      return cpus.length
+                        ? `${cpus.reduce((a, r) => a + (r.cpu ?? 0), 0).toFixed(1)}%`
+                        : "–";
+                    })()}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {fmtBytes(sortedRows.reduce((a, r) => a + (r.mem ?? 0), 0))}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
@@ -267,6 +316,63 @@ function Th({
       </button>
     </th>
   );
+}
+
+function HostUsageCard({
+  hostCpu,
+  hostMem,
+}: {
+  hostCpu?: HostCpuInfo;
+  hostMem?: HostMemInfo;
+}) {
+  if (hostCpu) {
+    const pct = hostCpu.container_percent;
+    return (
+      <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-neutral-600 dark:text-neutral-300">CPU</span>
+          <span className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
+            {pct === null
+              ? "–"
+              : `${pct.toFixed(1)}% of ${hostCpu.cores} cores`}
+          </span>
+        </div>
+        {pct !== null && (
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+            <div
+              className="h-full rounded-full bg-emerald-500"
+              style={{ width: `${Math.min(pct, 100)}%` }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (hostMem) {
+    const pct = hostMem.container_percent;
+    const usedBytes = pct !== null ? (hostMem.total_bytes * pct) / 100 : null;
+    return (
+      <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-neutral-600 dark:text-neutral-300">Memory</span>
+          <span className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
+            {pct === null || usedBytes === null
+              ? "–"
+              : `${fmtBytes(usedBytes)} of ${fmtBytes(hostMem.total_bytes)} (${pct.toFixed(1)}%)`}
+          </span>
+        </div>
+        {pct !== null && (
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+            <div
+              className="h-full rounded-full bg-emerald-500"
+              style={{ width: `${Math.min(pct, 100)}%` }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
 }
 
 function Stat({

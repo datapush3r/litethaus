@@ -5,7 +5,7 @@ import os
 import pty
 import re
 import subprocess
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -93,7 +93,7 @@ class DockerService:
                 return True
         return False
 
-    async def _stream_process_lines(self, cmd: list[str]) -> AsyncIterator[str]:
+    async def _stream_process_lines(self, cmd: list[str]) -> AsyncGenerator[str, None]:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -109,7 +109,7 @@ class DockerService:
             if process.returncode is None:
                 process.terminate()
 
-    async def stream_logs(self, stack: Stack, container: str | None = None) -> AsyncIterator[str]:
+    async def stream_logs(self, stack: Stack, container: str | None = None) -> AsyncGenerator[str, None]:
         cmd = (
             ["docker", "logs", "-f", "--tail", "100", container]
             if container
@@ -118,7 +118,7 @@ class DockerService:
         async for line in self._stream_process_lines(cmd):
             yield line
 
-    async def stream_container_logs(self, container_name: str) -> AsyncIterator[str]:
+    async def stream_container_logs(self, container_name: str) -> AsyncGenerator[str, None]:
         async for line in self._stream_process_lines(["docker", "logs", "-f", "--tail", "100", container_name]):
             yield line
 
@@ -129,7 +129,7 @@ class DockerService:
         return [self._describe(c) for c in containers]
 
     def container_stats(self, stack: Stack) -> list[dict[str, Any]]:
-        """Live resource usage for this stack's running containers (cpu %, mem bytes, gpu %).
+        """Live resource usage for this stack's running containers (cpu %, mem bytes, mem % of host).
 
         Takes one `docker stats --no-stream` snapshot of the whole host and keeps
         only rows belonging to this stack. Callers checking many stacks should
@@ -147,14 +147,7 @@ class DockerService:
             parts = line.split("\t")
             if len(parts) < 3 or parts[0] not in running:
                 continue
-            rows.append(
-                {
-                    "name": parts[0],
-                    "cpu_percent": self._parse_percent(parts[1]),
-                    "mem_bytes": self._parse_mem_usage(parts[2]),
-                    "gpu_percent": self._parse_percent(parts[3]) if len(parts) > 3 else None,
-                }
-            )
+            rows.append(self._stats_row(parts))
         return rows
 
     def host_container_stats(self, stacks: list[Stack]) -> list[dict[str, Any]]:
@@ -162,7 +155,7 @@ class DockerService:
 
         Cheaper than calling container_stats per stack (which re-runs the
         snapshot each time). Rows carry {stack, name, cpu_percent, mem_bytes,
-        gpu_percent}; stacks with no running containers contribute nothing.
+        mem_percent}; stacks with no running containers contribute nothing.
         """
         by_container: dict[str, str] = {}
         for s in stacks:
@@ -180,36 +173,37 @@ class DockerService:
             parts = line.split("\t")
             if len(parts) < 3 or parts[0] not in by_container:
                 continue
-            rows.append(
-                {
-                    "stack": by_container[parts[0]],
-                    "name": parts[0],
-                    "cpu_percent": self._parse_percent(parts[1]),
-                    "mem_bytes": self._parse_mem_usage(parts[2]),
-                    "gpu_percent": self._parse_percent(parts[3]) if len(parts) > 3 else None,
-                }
-            )
+            row = self._stats_row(parts)
+            row["stack"] = by_container[parts[0]]
+            rows.append(row)
         return rows
+
+    @staticmethod
+    def _stats_row(parts: list[str]) -> dict[str, Any]:
+        """Build a usage row from parsed `docker stats` columns.
+
+        Columns are name, cpu %, mem usage, then an optional mem % of host.
+        The percent is None when the column is absent or unparseable (older
+        docker CLIs don't emit it).
+        """
+        return {
+            "name": parts[0],
+            "cpu_percent": DockerService._parse_percent(parts[1]),
+            "mem_bytes": DockerService._parse_mem_usage(parts[2]),
+            "mem_percent": DockerService._parse_percent(parts[3]) if len(parts) > 3 else None,
+        }
 
     def _run_docker_stats(self) -> subprocess.CompletedProcess[str] | None:
         """One `docker stats --no-stream` snapshot of every running container.
 
-        GPUUsage needs Docker >= 28; older daemons error on the template, so
-        fall back to a format without it. Returns None on failure.
+        Returns None on failure.
         """
-        fmt = '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.GPUUsage}}'
+        fmt = '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}'
         try:
             proc = subprocess.run(
                 ["docker", "stats", "--no-stream", "--format", fmt],
                 capture_output=True, text=True, timeout=30,
             )
-            if proc.returncode != 0 and "GPUUsage" in (proc.stderr or ""):
-                logger.info("docker stats: GPU column unsupported, retrying without it")
-                fmt = '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
-                proc = subprocess.run(
-                    ["docker", "stats", "--no-stream", "--format", fmt],
-                    capture_output=True, text=True, timeout=30,
-                )
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
             logger.warning("docker stats failed: %s", exc)
             return None
@@ -252,18 +246,29 @@ class DockerService:
         containers = self.client.containers.list(filters={"label": CADDY_SERVICE_LABEL})
         if not containers:
             return None
-        if len(containers) > 1:
+        # docker SDK types Container.name as str | None; in practice it's always
+        # set. Collect the names separately so the type checker sees plain strs.
+        names = [c.name for c in containers if c.name is not None]
+        if len(names) > 1:
             logger.warning(
                 "Multiple containers matched %s: %s - picking alphabetically first",
                 CADDY_SERVICE_LABEL,
-                sorted(c.name for c in containers),
+                sorted(names),
             )
-        return sorted(containers, key=lambda c: c.name)[0]
+        target = min(names)
+        for c in containers:
+            if c.name == target:
+                return c
+        return None
 
     def exec_run(self, container_name: str, cmd: list[str]) -> tuple[int, bytes]:
         container = self.client.containers.get(container_name)
         result = container.exec_run(cmd)
-        return result.exit_code, result.output
+        exit_code: int = result.exit_code if result.exit_code is not None else -1
+        # docker SDK types output as bytes | Iterator[bytes]; with the default
+        # stream=False it's always bytes, but the type checker needs a cast.
+        output: bytes = bytes(result.output)  # type: ignore[arg-type]
+        return exit_code, output
 
     def exec_shell(self, container_name: str) -> tuple[int, subprocess.Popen]:
         master_fd, slave_fd = pty.openpty()

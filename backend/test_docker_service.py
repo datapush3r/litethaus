@@ -277,40 +277,13 @@ def test_container_stats_matches_running_containers_and_parses_rows() -> None:
         assert cmd[:2] == ["docker", "stats"]
         return _fake_run(
             returncode=0,
-            stdout="ex-a\t1.5%\t128MiB / 31GiB\t42%\nother-c\t0.1%\t1MiB / 31GiB\t-\nex-b\t0%\t0B / 31GiB\t-\n",
+            stdout="ex-a\t1.5%\t128MiB / 31GiB\t0.4%\nother-c\t0.1%\t1MiB / 31GiB\t0.0%\nex-b\t0%\t0B / 31GiB\t0.0%\n",
         )
 
     with patch("docker_service.subprocess.run", side_effect=fake_run):
         rows = svc.container_stats(stack)
 
-    assert rows == [{"name": "ex-a", "cpu_percent": 1.5, "mem_bytes": 128 * 1024**2, "gpu_percent": 42.0}]
-
-
-def test_container_stats_falls_back_when_gpu_column_unsupported() -> None:
-    stack = Stack(name="example", path="/config/stacks/example/compose.yaml")
-    svc = _svc()
-    running_a = SimpleNamespace(
-        name="ex-a",
-        status="running",
-        attrs={"State": {"Health": None}, "RestartCount": 0, "Config": {"Image": "nginx"}, "Created": "x"},
-    )
-    svc._client = SimpleNamespace(containers=_RecordingContainers(list_result=[running_a]))
-
-    calls: list[str] = []
-
-    def fake_run(cmd, **kwargs):
-        fmt = cmd[cmd.index("--format") + 1]
-        calls.append(fmt)
-        if "GPUUsage" in fmt:
-            return _fake_run(returncode=1, stderr="can't evaluate field GPUUsage")
-        return _fake_run(returncode=0, stdout="ex-a\t2.5%\t64MiB / 31GiB\n")
-
-    with patch("docker_service.subprocess.run", side_effect=fake_run):
-        rows = svc.container_stats(stack)
-
-    assert len(calls) == 2
-    assert "GPUUsage" not in calls[1]
-    assert rows == [{"name": "ex-a", "cpu_percent": 2.5, "mem_bytes": 64 * 1024**2, "gpu_percent": None}]
+    assert rows == [{"name": "ex-a", "cpu_percent": 1.5, "mem_bytes": 128 * 1024**2, "mem_percent": 0.4}]
 
 
 def test_container_stats_empty_when_nothing_running() -> None:
@@ -352,7 +325,7 @@ def test_host_container_stats_one_snapshot_for_all_stacks() -> None:
 
     def fake_run(cmd, **kwargs):
         assert cmd[:2] == ["docker", "stats"]
-        return _fake_run(returncode=0, stdout="ex-a\t3.0%\t16MiB / 31GiB\t-\n")
+        return _fake_run(returncode=0, stdout="ex-a\t3.0%\t16MiB / 31GiB\t0.1%\n")
 
     with patch("docker_service.subprocess.run", side_effect=fake_run) as mock_run:
         rows = svc.host_container_stats(
@@ -363,7 +336,7 @@ def test_host_container_stats_one_snapshot_for_all_stacks() -> None:
         )
 
     assert mock_run.call_count == 1
-    assert rows == [{"stack": "example", "name": "ex-a", "cpu_percent": 3.0, "mem_bytes": 16 * 1024**2, "gpu_percent": None}]
+    assert rows == [{"stack": "example", "name": "ex-a", "cpu_percent": 3.0, "mem_bytes": 16 * 1024**2, "mem_percent": 0.1}]
 
 
 def test_host_container_stats_empty_when_nothing_running() -> None:
@@ -400,7 +373,6 @@ if __name__ == "__main__":
     test_container_stats_matches_running_containers_and_parses_rows()
     test_container_stats_empty_when_nothing_running()
     test_container_stats_empty_when_docker_stats_fails()
-    test_container_stats_falls_back_when_gpu_column_unsupported()
     test_host_container_stats_one_snapshot_for_all_stacks()
     test_host_container_stats_empty_when_nothing_running()
     print("ok")

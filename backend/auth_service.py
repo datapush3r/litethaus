@@ -27,6 +27,10 @@ class AuthService:
         return bool((self._config.load().get("auth") or {}).get("password_hash"))
 
     def enabled(self) -> bool:
+        import os
+        override = os.environ.get("LITETHAUS_AUTH_ENABLED")
+        if override is not None:
+            return override.lower() in ("1", "true", "yes")
         return bool(self._config.load().get("auth_enabled", True))
 
     @staticmethod
