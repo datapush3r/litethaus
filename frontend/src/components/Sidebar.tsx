@@ -72,7 +72,7 @@ export function Sidebar({
       } ${open ? "translate-x-0" : "-translate-x-full"}`}
       aria-hidden={collapsed || undefined}
     >
-      <div className="mb-4 flex shrink-0 items-center gap-1">
+      <div className="mb-2 flex shrink-0 border-b border-neutral-200 pb-2 dark:border-neutral-800">
         {collapsed ? (
           <button
             onClick={onOpenHome}
