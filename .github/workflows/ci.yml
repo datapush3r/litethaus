@@ -32,7 +32,7 @@ jobs:
           SRC=$(ls *.py | grep -v '^test_')
           bandit -q $SRC --severity-level high
       - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@418762f3b91a05e756cec9e3be9d71fa92cfe2ba # v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
