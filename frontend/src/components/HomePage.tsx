@@ -364,7 +364,7 @@ function SensorValue({ sensor }: { sensor: HostSensor }) {
   if (sensor.kind === "fan") {
     return (
       <span className="tabular-nums text-neutral-900 dark:text-neutral-100">
-        {formatFan(sensor.value)}
+        {formatFan(sensor.value, sensor.unit)}
       </span>
     );
   }

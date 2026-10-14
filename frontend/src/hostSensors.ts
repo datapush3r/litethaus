@@ -2,7 +2,7 @@
 
 export interface HostSensor {
   chip: string;
-  kind: "temp" | "fan" | "voltage";
+  kind: "temp" | "fan" | "voltage" | "util" | "power";
   label: string;
   value: number;
   unit: string;
@@ -31,8 +31,11 @@ export function tempTone(c: number): "ok" | "warn" | "bad" {
   return "ok";
 }
 
-/** 0 RPM means "no fan / fan stopped" — show a dash instead of "0 RPM". */
-export function formatFan(rpm: number | null): string {
-  if (rpm === null || rpm === 0) return "–";
-  return `${rpm} RPM`;
+/**
+ * Fan readings: hwmon reports RPM, NVIDIA reports % of max. 0 (or missing)
+ * means "no fan / fan stopped" — show a dash instead.
+ */
+export function formatFan(value: number | null, unit = "RPM"): string {
+  if (value === null || value === 0) return "–";
+  return `${value} ${unit}`;
 }

@@ -38,5 +38,6 @@ describe("formatFan", () => {
     expect(formatFan(null)).toBe("–");
     expect(formatFan(0)).toBe("–");
     expect(formatFan(1150)).toBe("1150 RPM");
+    expect(formatFan(30, "%")).toBe("30 %");
   });
 });
