@@ -3,13 +3,16 @@ import { AlertTriangle, ArrowRight, PackageOpen } from "lucide-react";
 import {
   fetchHostCpu,
   fetchHostMem,
+  fetchHostSensors,
   sortStacksByStatus,
   type HostCpuInfo,
   type HostMemInfo,
+  type HostSensorsResponse,
   type Stack,
   type StackState,
   type StackStatus,
 } from "../api";
+import { formatFan, groupSensors, tempTone, type HostSensor } from "../hostSensors";
 import { BAD_HEALTH } from "../statusStyles";
 import { StackIcon } from "./StackIcon";
 
@@ -51,6 +54,7 @@ export function HomePage({
 }: HomePageProps) {
   const [hostMem, setHostMem] = useState<HostMemInfo | null>(null);
   const [hostCpu, setHostCpu] = useState<HostCpuInfo | null>(null);
+  const [sensors, setSensors] = useState<HostSensorsResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +67,11 @@ export function HomePage({
       fetchHostCpu()
         .then((c) => {
           if (!cancelled) setHostCpu(c);
+        })
+        .catch(() => {});
+      fetchHostSensors()
+        .then((s) => {
+          if (!cancelled) setSensors(s);
         })
         .catch(() => {});
     };
@@ -184,6 +193,39 @@ export function HomePage({
           <div className="flex flex-col gap-3">
             {hostCpu && <HostUsageCard hostCpu={hostCpu} />}
             {hostMem && <HostUsageCard hostMem={hostMem} />}
+          </div>
+        </section>
+      )}
+
+      {sensors?.available && (
+        <section>
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            Host sensors
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {groupSensors(sensors.sensors).map(([chip, chipSensors]) => (
+              <div
+                key={chip}
+                className="rounded-lg border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900"
+              >
+                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                  {chip}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {chipSensors.map((s, i) => (
+                    <div
+                      key={`${s.kind}:${s.label}:${i}`}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="text-neutral-600 dark:text-neutral-300">
+                        {s.label}
+                      </span>
+                      <SensorValue sensor={s} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -316,6 +358,26 @@ function Th({
       </button>
     </th>
   );
+}
+
+function SensorValue({ sensor }: { sensor: HostSensor }) {
+  if (sensor.kind === "fan") {
+    return (
+      <span className="tabular-nums text-neutral-900 dark:text-neutral-100">
+        {formatFan(sensor.value)}
+      </span>
+    );
+  }
+  const tone = sensor.kind === "temp" ? tempTone(sensor.value) : "ok";
+  const toneClass =
+    tone === "bad"
+      ? "text-red-600 dark:text-red-400"
+      : tone === "warn"
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-neutral-900 dark:text-neutral-100";
+  const value =
+    sensor.kind === "voltage" ? sensor.value.toFixed(2) : sensor.value;
+  return <span className={`tabular-nums ${toneClass}`}>{value} {sensor.unit}</span>;
 }
 
 function HostUsageCard({

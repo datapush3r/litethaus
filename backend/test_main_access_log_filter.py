@@ -21,6 +21,9 @@ def test_suppresses_status_polling_and_health() -> None:
     assert _FILTER.filter(_record("GET", "/stacks")) is False
     assert _FILTER.filter(_record("GET", "/stacks/foo/status")) is False
     assert _FILTER.filter(_record("GET", "/health")) is False
+    assert _FILTER.filter(_record("GET", "/host/mem")) is False
+    assert _FILTER.filter(_record("GET", "/host/cpu")) is False
+    assert _FILTER.filter(_record("GET", "/host/sensors")) is False
 
 
 def test_keeps_real_traffic() -> None:

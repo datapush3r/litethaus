@@ -18,10 +18,11 @@ from cert_service import cert_service
 from config_service import config_service
 from docker_service import docker_service
 from health_service import health_service
+from sensors_service import sensors_service
 from stacks_service import stack_service
 from terminal_service import terminal_service
 
-_NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks(?:/[^/ ]+/status)?|/health)(?:\?[^ ]*)? HTTP')
+_NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks(?:/[^/ ]+/status)?|/health|/host/(?:mem|cpu|sensors))(?:\?[^ ]*)? HTTP')
 
 
 class _SuppressPollingAccessLogs(logging.Filter):
@@ -112,6 +113,16 @@ def host_cpu() -> dict[str, Any]:
         "cores": os.cpu_count() or 1,
         "container_percent": health_service.host_cpu_percent(),
     }
+
+
+@api.get("/host/sensors")
+def host_sensors() -> dict[str, Any]:
+    """Host hardware sensors (temps, fans, voltages) from kernel sysfs.
+
+    Reports available=false when the container can't see any hwmon/thermal
+    data (e.g. an LXC without the host dirs exposed) — the UI hides itself.
+    """
+    return sensors_service.read()
 
 
 @api.get("/auth/status")

@@ -15,6 +15,7 @@ litethaus scans a directory of docker-compose stacks, gives you a dashboard to s
 - **Automatic reverse proxy** — set a domain and port on a stack (via its `.litethaus.yaml` sidecar file), and litethaus wires it into Caddy automatically
 - **Automatic HTTPS** — self-signed certs via Caddy's local CA (for `.home.arpa`/`.local` domains) or real ACME/Let's Encrypt certs for publicly resolvable domains
 - **Health monitoring** — per-container health and restart-loop status in the dashboard, with an optional webhook alert
+- **Host sensors** — CPU/GPU/motherboard temperatures, fan speeds, and labeled voltages on the homepage, read straight from kernel sysfs; the section disappears on hosts that expose no sensors (e.g. no GPU)
 - **Single-user login** — a simple password gate for the dashboard itself
 - **Light/dark/system theme**, responsive layout
 
@@ -71,6 +72,18 @@ Global settings live in `config.yaml`, generated automatically with defaults on 
 | `cloudflare_api_token` | Cloudflare API token (Zone:Read + DNS:Edit) used for DNS-01 ACME challenges/wildcard certs and for DDNS (`ddns_domains` below); leave blank to disable both |
 | `wildcard_domain` | Issue one wildcard cert (`*.<domain>`) covering every stack instead of a cert per stack domain; requires `cloudflare_api_token`; leave blank for per-stack certs |
 | `ddns_domains` | Domains to keep pointed at this host's current public IP via Cloudflare's API; requires `cloudflare_api_token`; each domain must already have an A record in Cloudflare (update-only, never creates records); checked every 5 minutes; leave empty to disable |
+| `theme` | `light`, `dark`, or `system` |
+
+The "Host sensors" section on the homepage reads kernel sysfs (`/sys/class/hwmon`, `/sys/class/thermal`) inside the container, so it usually just works. If you run litethaus inside a **Proxmox LXC** container, LXC hides those directories from guests by default — add to the container's config (`/etc/pve/lxc/<id>.conf`) and restart it:
+
+```
+lxc.mount.entry = /sys/class/hwmon /sys/class/hwmon none rw,create=dir
+lxc.mount.entry = /sys/class/thermal /sys/class/thermal none rw,create=dir
+```
+
+If the sensors still don't appear, bind-mount the host directories into the litethaus container and point the `LITETHAUS_HWMON_DIR` / `LITETHAUS_THERMAL_DIR` environment variables at them.
+
+Per-stack settings live in a `.litethaus.yaml` file inside each stack's own directory, alongside its compose file:
 | `theme` | `light`, `dark`, or `system` |
 | `webhook_url` | Optional webhook POSTed to when a stack becomes unhealthy or restart-loops (`{"stack": "<name>", "health": "<state>"}`), once a day for any TLS cert within 14 days of expiry (`{"cert_domain": "<domain>", "days_until_expiry": <int>}`), and for DDNS IP changes (`{"ddns_domain": "<name>", "old_ip": "<ip>", "new_ip": "<ip>"}`) or failures (`{"ddns_error": "<name>", "detail": "<string>"}`) |
 

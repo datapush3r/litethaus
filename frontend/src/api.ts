@@ -72,6 +72,14 @@ export async function fetchHostCpu(): Promise<HostCpuInfo> {
   return (await res.json()) as HostCpuInfo;
 }
 
+import type { HostSensorsResponse } from "./hostSensors";
+export type { HostSensor, HostSensorsResponse } from "./hostSensors";
+
+export async function fetchHostSensors(): Promise<HostSensorsResponse> {
+  const res = await fetch("/api/host/sensors");
+  return (await res.json()) as HostSensorsResponse;
+}
+
 export interface StackStatus {
   status: StackState;
   health: HealthState;
