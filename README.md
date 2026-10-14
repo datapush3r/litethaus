@@ -15,7 +15,7 @@ litethaus scans a directory of docker-compose stacks, gives you a dashboard to s
 - **Automatic reverse proxy** — set a domain and port on a stack (via its `.litethaus.yaml` sidecar file), and litethaus wires it into Caddy automatically
 - **Automatic HTTPS** — self-signed certs via Caddy's local CA (for `.home.arpa`/`.local` domains) or real ACME/Let's Encrypt certs for publicly resolvable domains
 - **Health monitoring** — per-container health and restart-loop status in the dashboard, with an optional webhook alert
-- **Host sensors** — CPU/GPU/motherboard temperatures, fan speeds, and labeled voltages on the homepage, read straight from kernel sysfs; the section disappears on hosts that expose no sensors (e.g. no GPU)
+- **Host sensors** — CPU/GPU/motherboard temperatures, fan speeds, and labeled voltages on the homepage, read from kernel sysfs, plus NVIDIA GPUs (temps, memory temps, fan %, utilization, power) whenever `nvidia-smi` is reachable from the container; the section disappears on hosts that expose no sensors
 - **Single-user login** — a simple password gate for the dashboard itself
 - **Light/dark/system theme**, responsive layout
 
