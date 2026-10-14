@@ -84,7 +84,6 @@ export function StackDetail({
   const icon = typeof meta.icon === 'string' ? meta.icon : ''
   const service = typeof meta.service === 'string' ? meta.service : (stack.services[0] ?? null)
   const lanOnly = Boolean(meta.lan_only)
-  const passiveHealthCheck = Boolean(meta.passive_health_check)
   const extraFields = Object.entries(meta).filter(([key]) => !KNOWN_FIELDS.has(key))
 
   const primaryContainer = containers.find((c) => c.state === 'running')?.name ?? containers[0]?.name ?? null
@@ -152,7 +151,6 @@ export function StackDetail({
     domain?: string | string[] | null
     service?: string | null
     lan_only?: boolean | null
-    passive_health_check?: boolean | null
   }) {
     setMetaError(null)
     try {
@@ -370,17 +368,6 @@ export function StackDetail({
                 checked={lanOnly}
                 onChange={(e) => saveMetadata({ lan_only: e.target.checked || null })}
                 title="Restrict to private/LAN IP ranges only"
-              />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-neutral-400 dark:text-neutral-500">Eject on failure</dt>
-            <dd className="mt-0.5 text-neutral-700 dark:text-neutral-200">
-              <input
-                type="checkbox"
-                checked={passiveHealthCheck}
-                onChange={(e) => saveMetadata({ passive_health_check: e.target.checked || null })}
-                title="Take this stack's upstream out of rotation for 30s after a failed request"
               />
             </dd>
           </div>
