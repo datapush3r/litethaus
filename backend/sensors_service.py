@@ -76,7 +76,9 @@ class SensorService:
                 label_file = _read(f.with_name(f.name.replace("_input", "") + "_label"))
                 if f.name.startswith("temp") and f.name.endswith("_input"):
                     val = _read_int(f)
-                    if val is None:
+                    # Chips report -40 (or similar deep-negative) for inactive
+                    # sensors; real hardware never reads that cold in a server.
+                    if val is None or val / 1000 < -25:
                         continue
                     out.append({
                         "chip": chip, "kind": "temp",

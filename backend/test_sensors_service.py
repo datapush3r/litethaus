@@ -105,11 +105,20 @@ def test_chip_display_names() -> None:
     assert _chip_display_name("someoddchip") == "Someoddchip"
 
 
+def test_inactive_sensor_readings_are_skipped() -> None:
+    with _with_sysfs() as (hwmon, _):
+        _make_chip(hwmon, 0, "nct6775", {"temp1_input": "-40000", "temp2_input": "30000"})
+        sensors = SensorService().read()["sensors"]
+        assert len(sensors) == 1
+        assert sensors[0]["value"] == 30.0
+
+
 if __name__ == "__main__":
     test_parses_temps_fans_and_labeled_voltages()
     test_fan_label_fallback()
     test_missing_dirs_means_unavailable()
     test_empty_dirs_means_unavailable()
     test_junk_temp_file_is_skipped()
+    test_inactive_sensor_readings_are_skipped()
     test_chip_display_names()
     print("ok")
