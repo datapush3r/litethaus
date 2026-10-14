@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, PackageOpen } from "lucide-react";
 import {
   fetchHostCpu,
+  fetchHostDisk,
   fetchHostMem,
   fetchHostSensors,
   sortStacksByStatus,
   type HostCpuInfo,
+  type HostDiskInfo,
   type HostMemInfo,
   type HostSensorsResponse,
   type Stack,
@@ -55,6 +57,7 @@ export function HomePage({
   const [hostMem, setHostMem] = useState<HostMemInfo | null>(null);
   const [hostCpu, setHostCpu] = useState<HostCpuInfo | null>(null);
   const [sensors, setSensors] = useState<HostSensorsResponse | null>(null);
+  const [disks, setDisks] = useState<HostDiskInfo[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +75,11 @@ export function HomePage({
       fetchHostSensors()
         .then((s) => {
           if (!cancelled) setSensors(s);
+        })
+        .catch(() => {});
+      fetchHostDisk()
+        .then((d) => {
+          if (!cancelled) setDisks(d.filesystems);
         })
         .catch(() => {});
     };
@@ -185,7 +193,7 @@ export function HomePage({
         </StackSection>
       )}
 
-      {(hostCpu || hostMem) && (
+      {(hostCpu || hostMem || disks?.length) && (
         <section>
           <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Host usage
@@ -193,6 +201,7 @@ export function HomePage({
           <div className="flex flex-col gap-3">
             {hostCpu && <HostUsageCard hostCpu={hostCpu} />}
             {hostMem && <HostUsageCard hostMem={hostMem} />}
+            {disks?.map((d) => <HostUsageCard key={d.mount} hostDisk={d} />)}
           </div>
         </section>
       )}
@@ -383,10 +392,39 @@ function SensorValue({ sensor }: { sensor: HostSensor }) {
 function HostUsageCard({
   hostCpu,
   hostMem,
+  hostDisk,
 }: {
   hostCpu?: HostCpuInfo;
   hostMem?: HostMemInfo;
+  hostDisk?: HostDiskInfo;
 }) {
+  if (hostDisk) {
+    const pct = hostDisk.percent;
+    const barClass =
+      pct >= 90
+        ? "bg-red-500"
+        : pct >= 80
+          ? "bg-amber-500"
+          : "bg-emerald-500";
+    return (
+      <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-neutral-600 dark:text-neutral-300">
+            Disk {hostDisk.mount}
+          </span>
+          <span className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
+            {fmtBytes(hostDisk.used_bytes)} of {fmtBytes(hostDisk.total_bytes)} ({pct.toFixed(1)}%)
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+          <div
+            className={`h-full rounded-full ${barClass}`}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+        </div>
+      </div>
+    );
+  }
   if (hostCpu) {
     const pct = hostCpu.container_percent;
     return (

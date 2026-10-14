@@ -22,7 +22,7 @@ from sensors_service import sensors_service
 from stacks_service import stack_service
 from terminal_service import terminal_service
 
-_NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks(?:/[^/ ]+/status)?|/health|/host/(?:mem|cpu|sensors))(?:\?[^ ]*)? HTTP')
+_NOISY_ACCESS_LOG_RE = re.compile(r'"(?:GET|HEAD) (?:/stacks(?:/[^/ ]+/status)?|/health|/host/(?:mem|cpu|sensors|disk))(?:\?[^ ]*)? HTTP')
 
 
 class _SuppressPollingAccessLogs(logging.Filter):
@@ -97,11 +97,9 @@ def health() -> dict[str, str]:
 
 @api.get("/host/mem")
 def host_mem() -> dict[str, Any]:
-    """Host RAM usage: total bytes and the % used by all running containers."""
-    page_size = os.sysconf("SC_PAGE_SIZE")
-    phys_pages = os.sysconf("SC_PHYS_PAGES")
+    """Host RAM usage: total bytes (MemTotal) and the % used by all running containers."""
     return {
-        "total_bytes": int(page_size * phys_pages),
+        "total_bytes": health_service.host_mem_total_bytes() or 0,
         "container_percent": health_service.host_mem_percent(),
     }
 
@@ -120,9 +118,47 @@ def host_sensors() -> dict[str, Any]:
     """Host hardware sensors (temps, fans, voltages) from kernel sysfs.
 
     Reports available=false when the container can't see any hwmon/thermal
-    data (e.g. an LXC without the host dirs exposed) — the UI hides itself.
+    data (e.g. an LXC without the host dirs exposed) - the UI hides itself.
     """
     return sensors_service.read()
+
+
+def host_disk_usage(paths: list[str]) -> list[dict[str, Any]]:
+    """df-style usage for each distinct filesystem under the given paths.
+
+    Percent uses df's convention: used / (used + available), not / total -
+    so the number matches what `df` prints.
+    """
+    out: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for p in paths:
+        try:
+            st = os.stat(p)
+            vfs = os.statvfs(p)
+        except OSError:
+            continue
+        if st.st_dev in seen:  # same filesystem mounted twice -> report once
+            continue
+        seen.add(st.st_dev)
+        frsize = vfs.f_frsize
+        used = (vfs.f_blocks - vfs.f_bfree) * frsize
+        avail = vfs.f_bavail * frsize
+        denom = used + avail
+        out.append({
+            "mount": p,
+            "total_bytes": vfs.f_blocks * frsize,
+            "used_bytes": used,
+            "avail_bytes": avail,
+            "percent": round(used / denom * 100, 1) if denom else 0.0,
+        })
+    return out
+
+
+@api.get("/host/disk")
+def host_disk() -> dict[str, Any]:
+    """Disk usage of the root filesystem and the stacks directory."""
+    cfg = config_service.load()
+    return {"filesystems": host_disk_usage(["/", str(cfg.get("stacks_dir") or "/")])}
 
 
 @api.get("/auth/status")

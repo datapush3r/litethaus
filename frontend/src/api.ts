@@ -80,6 +80,19 @@ export async function fetchHostSensors(): Promise<HostSensorsResponse> {
   return (await res.json()) as HostSensorsResponse;
 }
 
+export interface HostDiskInfo {
+  mount: string;
+  total_bytes: number;
+  used_bytes: number;
+  avail_bytes: number;
+  percent: number;
+}
+
+export async function fetchHostDisk(): Promise<{ filesystems: HostDiskInfo[] }> {
+  const res = await fetch("/api/host/disk");
+  return (await res.json()) as { filesystems: HostDiskInfo[] };
+}
+
 export interface StackStatus {
   status: StackState;
   health: HealthState;

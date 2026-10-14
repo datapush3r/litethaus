@@ -1,4 +1,5 @@
 import datetime as _dt
+import os
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
@@ -396,6 +397,38 @@ def test_check_caddy_sync_skips_when_disabled() -> None:
         assert sync.call_count == 0
 
 
+def test_host_mem_total_bytes_parses_meminfo() -> None:
+    import tempfile
+    from health_service import host_mem_total_bytes
+    with tempfile.TemporaryDirectory() as tmp:
+        p = os.path.join(tmp, "meminfo")
+        with open(p, "w") as f:
+            f.write("MemTotal:        9764421 kB\nMemFree:      1 kB\n")
+        assert host_mem_total_bytes(p) == 9764421 * 1024
+        assert host_mem_total_bytes(os.path.join(tmp, "nope")) is None
+
+
+def test_check_once_mem_percent_uses_memtotal_not_container_percents() -> None:
+    import tempfile
+    import health_service
+    with tempfile.TemporaryDirectory():
+        cfg = {"webhook_url": "", "update_check_enabled": False,
+               "caddy_enabled": False, "healthchecks_url": "",
+               "cloudflare_api_token": "", "ddns_domains": []}
+        # A container with a 2 GiB memory limit reporting 50% of that limit:
+        # the percent must be taken against host RAM (100 GiB), not the limit.
+        with patch("health_service.host_mem_total_bytes", return_value=100 * 2**30), \
+             patch.object(health_service.docker_service, "host_container_stats",
+                          return_value=[{"name": "limited", "cpu_percent": 5.0,
+                                         "mem_bytes": 1 * 2**30, "mem_percent": 50.0}]), \
+             patch.object(health_service.stack_service, "list_stacks", return_value=[]) , \
+             patch.object(health_service, "config_service",
+                          type("Cfg", (), {"load": staticmethod(lambda: cfg)})):
+            svc = HealthService()
+            svc.check_once()
+        assert svc.host_mem_percent() == 1.0
+
+
 if __name__ == "__main__":
     test_check_certs_skips_when_no_webhook_configured()
     test_check_certs_respects_time_gate()
@@ -424,4 +457,6 @@ if __name__ == "__main__":
     test_ping_healthchecks_pings_configured_url()
     test_ping_healthchecks_swallows_errors()
     test_check_once_logs_health_transitions_only()
+    test_host_mem_total_bytes_parses_meminfo()
+    test_check_once_mem_percent_uses_memtotal_not_container_percents()
     print("ok")

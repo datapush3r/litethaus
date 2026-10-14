@@ -26,6 +26,23 @@ UPDATE_CHECK_INTERVAL_SECONDS = 12 * 60 * 60
 AUTO_UPDATE_DEFAULT_TIME = "03:00"
 
 
+def host_mem_total_bytes(path: str = "/proc/meminfo") -> int | None:
+    """Total host RAM from /proc/meminfo (MemTotal), in bytes.
+
+    /proc is the kernel's view, so this is correct inside containers and
+    LXC alike, and - unlike docker-stats' per-container percents - it is
+    unaffected by per-container memory limits.
+    """
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 class HealthService:
     def __init__(self) -> None:
         self._last_health: dict[str, str] = {}
@@ -49,22 +66,21 @@ class HealthService:
         webhook_url = cfg.get("webhook_url") or ""
         # One docker-stats snapshot covers every running container on the host;
         # calling container_stats per stack would re-run it once per stack.
-        self._container_stats = docker_service.host_container_stats(
+        # docker stats can outlive its timeout on big hosts - keep the
+        # previous snapshot rather than blanking the page on one slow tick.
+        stats = docker_service.host_container_stats(
             [s for s in stack_service.list_stacks() if not s.error]
         )
-        # Sum of per-container memory as a share of host RAM. docker stats
-        # reports each container's MemPerc as % of the whole host, so the sum
-        # of mem_bytes / (host total recovered from any row) gives the aggregate.
+        if stats:
+            self._container_stats = stats
         rows = self._container_stats
-        host_total = next(
-            ((r["mem_bytes"] or 0) / (r["mem_percent"] / 100.0)
-             for r in rows if r["mem_bytes"] and r["mem_percent"]),
-            None,
-        )
+        # Sum of per-container memory against the host's total RAM. (The old
+        # version "recovered" the total from a random container's MemPerc,
+        # which is wrong for containers with a memory *limit* - their percent
+        # is relative to the limit, not the host.)
+        total = host_mem_total_bytes()
         used = sum(r["mem_bytes"] or 0 for r in rows)
-        self._host_mem_percent = (
-            round(used / host_total * 100, 1) if host_total else None
-        )
+        self._host_mem_percent = round(used / total * 100, 1) if total else None
         # Sum of per-container CPU as a share of all host cores. docker stats
         # reports each container's CPUPerc against one core, so the sum is in
         # "core-equivalents" and dividing by the core count gives host %.

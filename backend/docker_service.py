@@ -202,7 +202,7 @@ class DockerService:
         try:
             proc = subprocess.run(
                 ["docker", "stats", "--no-stream", "--format", fmt],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=60,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
             logger.warning("docker stats failed: %s", exc)
