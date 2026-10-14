@@ -44,3 +44,12 @@ id_ed25519*
 
 # Playwright MCP session output.
 .playwright-mcp/
+
+# AI agent / workflow artifacts (CLAUDE.md, agent dirs, superpowers plans &
+# specs, personal TODOs) - kept on the working machine, never committed.
+CLAUDE.md
+.claude/
+.pi/
+.superpowers/
+docs/superpowers/
+TODO

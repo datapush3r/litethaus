@@ -1,6 +1,6 @@
 # ROADMAP.md - Project Phase Roadmap for litethaus
 
-Tracks what's shipped, phase by phase. For architecture rules and dev commands, see [CLAUDE.md](CLAUDE.md). For what changed and why within a phase, `git log` has detailed commit messages — each one documents the fix/feature, the reasoning, and how it was verified (including live browser testing via Playwright, not just typechecking).
+Tracks what's shipped, phase by phase. For architecture rules and dev commands, see `CLAUDE.md` (a local-only file, deliberately not in the repo). For what changed and why within a phase, `git log` has detailed commit messages — each one documents the fix/feature, the reasoning, and how it was verified (including live browser testing via Playwright, not just typechecking).
 
 Backend foundation (done):
 - [x] **Phase 1: Foundation & Local Dev Sandbox** (Backend/Frontend skeleton + Caddy API linkage via Compose)
