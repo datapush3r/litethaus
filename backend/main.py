@@ -17,7 +17,7 @@ from caddy_service import caddy_service
 from cert_service import cert_service
 from config_service import config_service
 from docker_service import docker_service
-from health_service import health_service
+from health_service import health_service, host_mem_total_bytes
 from sensors_service import sensors_service
 from stacks_service import stack_service
 from terminal_service import terminal_service
@@ -99,7 +99,7 @@ def health() -> dict[str, str]:
 def host_mem() -> dict[str, Any]:
     """Host RAM usage: total bytes (MemTotal) and the % used by all running containers."""
     return {
-        "total_bytes": health_service.host_mem_total_bytes() or 0,
+        "total_bytes": host_mem_total_bytes() or 0,
         "container_percent": health_service.host_mem_percent(),
     }
 
